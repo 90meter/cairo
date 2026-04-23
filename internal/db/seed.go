@@ -52,41 +52,47 @@ func (db *DB) seedConfig() error {
 }
 
 func (db *DB) seedRoles() error {
+	// Roles are seeded with an empty model field on purpose. ResolveModel
+	// checks role.model first, so a non-empty value here would shadow the
+	// user's wizard-selected config.model and break Cairo on any machine
+	// that doesn't have the hardcoded model installed. Users who want
+	// per-role specialization (e.g. a coding-tuned model for "coder") can
+	// set it later via Selene's role tool.
 	roles := []struct {
 		name, description, model, promptKey, tools string
 	}{
 		{
 			"thinking_partner",
 			"Interactive collaborator — thinks alongside the user, asks questions, proposes approaches",
-			"qwen3.6:35b-a3b-mlx-bf16",
+			"",
 			"role:thinking_partner",
 			`["read","write","edit","bash","grep","find","ls","memory","summary_search","prompt_show","fact_promote","custom_tool","skill","note","job","task","agent","session","role","soul","config","prompt_part"]`,
 		},
 		{
 			"orchestrator",
 			"Coordinates jobs — breaks work into tasks, assigns roles, tracks progress",
-			"qwen3.6:35b-a3b-mlx-bf16",
+			"",
 			"role:orchestrator",
 			`["read","bash","job","task","agent","memory","summary_search","prompt_show","note","role"]`,
 		},
 		{
 			"coder",
 			"Implements — writes and edits code, runs tests, produces artifacts",
-			"qwen35-35b-coding:latest",
+			"",
 			"role:coder",
 			`["read","write","edit","bash","grep","find","ls","memory","note","task"]`,
 		},
 		{
 			"planner",
 			"Designs approach — researches, outlines, identifies risks before implementation begins",
-			"qwen3.6:35b-a3b-mlx-bf16",
+			"",
 			"role:planner",
 			`["read","bash","grep","find","ls","memory","summary_search","prompt_show","note","skill","role"]`,
 		},
 		{
 			"reviewer",
 			"Reviews output — checks code, tests, and results against requirements",
-			"mistral-small-24b:latest",
+			"",
 			"role:reviewer",
 			`["read","bash","grep","find","ls","memory","note","task"]`,
 		},
