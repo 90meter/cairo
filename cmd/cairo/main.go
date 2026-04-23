@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bufio"
 	"context"
 	"flag"
 	"fmt"
@@ -70,12 +71,12 @@ func main() {
 	}
 
 	// --- interactive / single-message mode ---
-	ollamaURL, _ := database.Config.Get("ollama_url")
+	ollamaURL := resolveOllamaURL(database)
 	embedModel, _ := database.Config.Get("embed_model")
 
-	llmClient := llm.New(ollamaURL)
-	if err := llmClient.Ping(); err != nil {
-		fatalf("ollama: %v\n\nmake sure Ollama is running at %s", err, ollamaURL)
+	llmClient, err := connectOllama(database, ollamaURL)
+	if err != nil {
+		fatalf("ollama: %v", err)
 	}
 
 	sessionRole := *roleFlag
@@ -143,7 +144,7 @@ func runTask(database *db.DB, taskID int64, background bool) error {
 		return fmt.Errorf("get task: %w", err)
 	}
 
-	ollamaURL, _ := database.Config.Get("ollama_url")
+	ollamaURL := resolveOllamaURL(database)
 	embedModel, _ := database.Config.Get("embed_model")
 
 	llmClient := llm.New(ollamaURL)
@@ -300,4 +301,42 @@ func resolveSession(database *db.DB, llmClient *llm.Client, forceNew bool, id in
 func fatalf(format string, args ...any) {
 	fmt.Fprintf(os.Stderr, "cairo: "+format+"\n", args...)
 	os.Exit(1)
+}
+
+// resolveOllamaURL returns the Ollama URL, preferring the OLLAMA_URL env var
+// over the stored DB config value. Env wins so headless/CI/Docker setups can
+// override without mutating the DB.
+func resolveOllamaURL(database *db.DB) string {
+	if env := strings.TrimSpace(os.Getenv("OLLAMA_URL")); env != "" {
+		return env
+	}
+	url, _ := database.Config.Get("ollama_url")
+	return url
+}
+
+// connectOllama pings Ollama and, on failure, prompts the user for a new URL
+// on stdin. URLs entered at the prompt are persisted to the config table so
+// they stick across runs. Loops until ping succeeds or stdin closes.
+func connectOllama(database *db.DB, url string) (*llm.Client, error) {
+	reader := bufio.NewReader(os.Stdin)
+	for {
+		client := llm.New(url)
+		if err := client.Ping(); err == nil {
+			return client, nil
+		} else {
+			fmt.Fprintf(os.Stderr, "cairo: ollama unreachable at %s: %v\n", url, err)
+		}
+		fmt.Fprint(os.Stderr, "Enter Ollama URL (blank to retry, Ctrl+C to quit): ")
+		line, err := reader.ReadString('\n')
+		if err != nil {
+			return nil, fmt.Errorf("read stdin: %w", err)
+		}
+		line = strings.TrimSpace(line)
+		if line != "" {
+			url = line
+			if err := database.Config.Set("ollama_url", url); err != nil {
+				fmt.Fprintf(os.Stderr, "cairo: warning: failed to save URL to config: %v\n", err)
+			}
+		}
+	}
 }
