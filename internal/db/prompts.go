@@ -98,3 +98,9 @@ func scanPromptParts(rows *sql.Rows) ([]*PromptPart, error) {
 	}
 	return out, rows.Err()
 }
+
+// DeleteByKeyPrefix removes all prompt parts whose key starts with prefix.
+func (q *PromptQ) DeleteByKeyPrefix(prefix string) error {
+	_, err := q.db.Exec(`DELETE FROM prompt_parts WHERE key LIKE ?`, prefix+"%")
+	return err
+}

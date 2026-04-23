@@ -33,14 +33,20 @@ func applyTemplates(s string, vars map[string]string) string {
 //
 // Structure:
 //  1. Base parts (trigger IS NULL), ordered by load_order
-//  2. Soul — the AI's self-maintained persona (from config.soul_prompt)
-//  3. Role addendum (trigger = "role:<roleName>")
-//  4. Tool addenda (trigger = "tool:<toolName>") for each active tool
-//  5. Custom tool prompt_addendum fields
-//  6. Recent memories (capped at config.memory_limit, default 15)
-//  7. Date + cwd stamp
+//  2. Environment hints (wsh, VS Code, shell)
+//  3. Soul — the AI's self-maintained persona (from config.soul_prompt)
+//  4. Role addendum (trigger = "role:<roleName>")
+//  5. Tool addenda (trigger = "tool:<toolName>") for each active tool
+//  6. Custom tool prompt_addendum fields
+//  7. Recent summaries
+//  8. Recent memories (capped)
+//  9. Date + cwd stamp
+// 10. Template substitution ({{key}} → config values)
 func BuildSystemPrompt(database *db.DB, sessionID int64, roleName, cwd string, tools []Tool) (llm.Message, error) {
 	var b strings.Builder
+
+	// 0. Detect environment.
+	env := detectEnvironment()
 
 	// 1. base parts
 	base, err := database.Prompts.Base()
@@ -52,7 +58,20 @@ func BuildSystemPrompt(database *db.DB, sessionID int64, roleName, cwd string, t
 		b.WriteString("\n\n")
 	}
 
-	// 2. soul — self-maintained persona
+	// 2. Environment hints — detect wsh, VS Code, and shell, append directly.
+	if env.IsWsh {
+		b.WriteString("You are running within Wave Terminal (wsh). Use `wsh view <file>`, `wsh edit <file>`, or `wsh browser <url>` to collaborate. Run `wsh -h` to learn more about available commands.\n\n")
+	}
+
+	if env.IsVsCode {
+		b.WriteString("You are running within VS Code. Use `code -r <file>` to open files, `code <dir>` to open folders. Run `code --help` to learn more.\n\n")
+	}
+
+	if env.Shell != "" {
+		b.WriteString("You are running in " + env.Shell + ".\n\n")
+	}
+
+	// 3. soul — self-maintained persona
 	soul, _ := database.Config.Get("soul_prompt")
 	if soul != "" {
 		b.WriteString("## My character\n\n")
@@ -142,11 +161,11 @@ func BuildSystemPrompt(database *db.DB, sessionID int64, roleName, cwd string, t
 		b.WriteByte('\n')
 	}
 
-	// 7. stamp
+	// 8. stamp
 	b.WriteString(fmt.Sprintf("Date: %s\nWorking directory: %s\n",
 		time.Now().Format("2006-01-02 15:04 MST"), cwd))
 
-	// 8. template substitution — every config key is a {{key}} template var.
+	// 9. template substitution — every config key is a {{key}} template var.
 	// Runs once over the assembled prompt so it covers every section: base,
 	// role, tool addenda, soul, summaries, memories, stamp. Cheap enough to
 	// do per turn; keeps the source content clean and the mapping central.
