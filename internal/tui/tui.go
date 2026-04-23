@@ -7,6 +7,9 @@ package tui
 import (
 	"context"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -26,6 +29,22 @@ import (
 // Run starts the Bubble Tea program. Blocks until the user quits. Drains the
 // agent's background goroutines (summarizer, etc.) on the way out.
 func Run(a *agent.Agent, database *db.DB, session *db.Session) error {
+	// Redirect Go's default logger to a file. Background workers (summarizer,
+	// memory_search, etc.) call log.Printf for warnings/errors; in alt-screen
+	// mode those writes leak into the rendered display and corrupt it. The
+	// log file lives next to the DB so users can tail it for debugging.
+	if home := os.Getenv("HOME"); home != "" {
+		logPath := filepath.Join(home, ".cairo2", "cairo.log")
+		if f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
+			prev := log.Writer()
+			log.SetOutput(f)
+			defer func() {
+				log.SetOutput(prev)
+				f.Close()
+			}()
+		}
+	}
+
 	// Pin color profile so lipgloss doesn't need to probe the terminal.
 	lipgloss.DefaultRenderer().SetColorProfile(termenv.TrueColor)
 

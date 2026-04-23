@@ -33,9 +33,10 @@ func runFirstRunWizard(database *db.DB, client *llm.Client) error {
 
 	needModel := !contains(models, configValue(database, "model"))
 	needEmbed := !contains(models, configValue(database, "embed_model"))
+	needSummary := !contains(models, configValue(database, "summary_model"))
 	needUser := configValue(database, "user_name") == ""
 
-	if !needModel && !needEmbed && !needUser {
+	if !needModel && !needEmbed && !needSummary && !needUser {
 		// Nothing to ask — silently mark complete so we never re-enter.
 		return database.Config.Set("setup_complete", "true")
 	}
@@ -68,6 +69,21 @@ func runFirstRunWizard(database *db.DB, client *llm.Client) error {
 		}
 		if err := database.Config.Set("embed_model", choice); err != nil {
 			return fmt.Errorf("save embed_model: %w", err)
+		}
+	}
+
+	if needSummary {
+		fmt.Println("\n(typically a smaller chat model — used to summarize old turns in the background)")
+		display := filterChatModels(models)
+		if len(display) == 0 {
+			display = models
+		}
+		choice, err := pickFromList(reader, "Summary model", display)
+		if err != nil {
+			return wizardErr(err)
+		}
+		if err := database.Config.Set("summary_model", choice); err != nil {
+			return fmt.Errorf("save summary_model: %w", err)
 		}
 	}
 
@@ -135,6 +151,20 @@ func filterEmbedModels(all []string) []string {
 		if strings.Contains(lower, "embed") || strings.Contains(lower, "nomic") {
 			out = append(out, m)
 		}
+	}
+	return out
+}
+
+// filterChatModels returns models that look like chat models (i.e. not
+// embedding-only models). Used to narrow the summary-model picker.
+func filterChatModels(all []string) []string {
+	var out []string
+	for _, m := range all {
+		lower := strings.ToLower(m)
+		if strings.Contains(lower, "embed") || strings.Contains(lower, "nomic") {
+			continue
+		}
+		out = append(out, m)
 	}
 	return out
 }
