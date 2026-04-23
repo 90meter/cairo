@@ -906,15 +906,24 @@ func renderStreamingPulse(tick int) string {
 // --- transcript helpers ---
 
 func (m *model) appendUser(text string) {
+	const prefix = "You: "
+	width := m.width - len(prefix)
+	if width < 20 {
+		width = 20
+	}
 	fmt.Fprintf(m.transcript, "%s%s\n\n",
-		m.styles.voiceUser.Render("You: "),
-		m.styles.body.Render(text))
+		m.styles.voiceUser.Render(prefix),
+		m.styles.body.Width(width).Render(text))
 	m.pushViewport()
 }
 
 func (m *model) appendSystem(text string) {
+	width := m.width
+	if width < 20 {
+		width = 20
+	}
 	fmt.Fprintf(m.transcript, "%s\n\n",
-		m.styles.voiceSystem.Render(text))
+		m.styles.voiceSystem.Width(width).Render(text))
 	m.pushViewport()
 }
 
