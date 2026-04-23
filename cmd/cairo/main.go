@@ -79,6 +79,10 @@ func main() {
 		fatalf("ollama: %v", err)
 	}
 
+	if err := runFirstRunWizard(database, llmClient); err != nil {
+		fatalf("setup: %v", err)
+	}
+
 	sessionRole := *roleFlag
 	if sessionRole == "" {
 		sessionRole = "thinking_partner"

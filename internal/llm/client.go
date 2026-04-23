@@ -43,3 +43,27 @@ func (c *Client) post(path string, body any) (*http.Response, error) {
 	}
 	return c.http.Post(c.url+path, "application/json", bytes.NewReader(b))
 }
+
+// ListModels returns the names of models currently installed on the Ollama
+// server (the equivalent of `ollama list`).
+func (c *Client) ListModels() ([]string, error) {
+	resp, err := c.http.Get(c.url + "/api/tags")
+	if err != nil {
+		return nil, fmt.Errorf("list models: %w", err)
+	}
+	defer resp.Body.Close()
+
+	var body struct {
+		Models []struct {
+			Name string `json:"name"`
+		} `json:"models"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return nil, fmt.Errorf("decode models: %w", err)
+	}
+	names := make([]string, 0, len(body.Models))
+	for _, m := range body.Models {
+		names = append(names, m.Name)
+	}
+	return names, nil
+}
