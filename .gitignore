@@ -1,0 +1,33 @@
+# Editor / IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Local dev notes & agent state
+.internal/
+.claude/
+.cairo2/
+
+# Secrets / env
+.env
+.env.*
+!.env.example
+
+# Go binary output (if ever built into repo dir)
+/cairo
+/cairo.exe
+/bin/
+
+# Cairo identity bundles & stray DB files
+*.cairo
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+
+# OS crash / log dumps
+*.log
+core
