@@ -1,5 +1,7 @@
 # Cairo
 
+[![CI](https://github.com/scotmcc/cairo/actions/workflows/ci.yml/badge.svg)](https://github.com/scotmcc/cairo/actions/workflows/ci.yml)
+
 **Collaborative AI Rhizomatic Orchestrator** — a local-first AI coding harness where the database *is* the being.
 
 Cairo runs entirely on your machine. It talks to [Ollama](https://ollama.com) for inference, stores everything in one SQLite file, and exposes itself through a keyboard-first TUI with panels for threads, memory, prompt preview, sessions, and local files. The default identity is **Selene** — rename her any time.
