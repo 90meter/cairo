@@ -119,8 +119,10 @@ type model struct {
 	input    textarea.Model
 
 	// Transcript buffer — append-only, rendered into the viewport on each
-	// update. Streaming tokens land here as they arrive.
-	transcript strings.Builder
+	// update. Streaming tokens land here as they arrive. Pointer so the
+	// model can be passed by value (Bubble Tea idiom for Update) without
+	// triggering strings.Builder's no-copy-after-write check.
+	transcript *strings.Builder
 
 	// Streaming state — whether Selene is mid-turn, plus the cancel handle
 	// for the in-flight context so Ctrl-C can abort the turn without killing
@@ -205,15 +207,16 @@ func newModel(a *agent.Agent, database *db.DB, sess *db.Session) model {
 	ch, unsub := a.Bus().Subscribe()
 
 	m := model{
-		agent:    a,
-		db:       database,
-		session:  sess,
-		input:    ti,
-		aiName:   aiName,
-		commands: defaultCommands(),
-		eventCh:  ch,
-		unsub:    unsub,
-		styles:   newStyles(sess.Role),
+		agent:      a,
+		db:         database,
+		session:    sess,
+		input:      ti,
+		aiName:     aiName,
+		commands:   defaultCommands(),
+		eventCh:    ch,
+		unsub:      unsub,
+		styles:     newStyles(sess.Role),
+		transcript: &strings.Builder{},
 	}
 	m.refreshCounts()
 	return m
@@ -873,20 +876,20 @@ func renderStreamingPulse(tick int) string {
 // --- transcript helpers ---
 
 func (m *model) appendUser(text string) {
-	fmt.Fprintf(&m.transcript, "%s%s\n\n",
+	fmt.Fprintf(m.transcript, "%s%s\n\n",
 		m.styles.voiceUser.Render("You: "),
 		m.styles.body.Render(text))
 	m.pushViewport()
 }
 
 func (m *model) appendSystem(text string) {
-	fmt.Fprintf(&m.transcript, "%s\n\n",
+	fmt.Fprintf(m.transcript, "%s\n\n",
 		m.styles.voiceSystem.Render(text))
 	m.pushViewport()
 }
 
 func (m *model) startAssistant() {
-	fmt.Fprintf(&m.transcript, "%s",
+	fmt.Fprintf(m.transcript, "%s",
 		m.styles.voiceSelene.Render(m.aiName+": "))
 	m.streaming = true
 	m.pushViewport()
@@ -907,7 +910,7 @@ func (m *model) appendToolStart(name, argsPreview string) {
 		argsPreview = " " + argsPreview
 	}
 	line := fmt.Sprintf("  ▸ %s%s", name, argsPreview)
-	fmt.Fprintf(&m.transcript, "%s", m.styles.toolLine.Render(line))
+	fmt.Fprintf(m.transcript, "%s", m.styles.toolLine.Render(line))
 	m.pushViewport()
 }
 
@@ -916,7 +919,7 @@ func (m *model) appendToolEnd(ok bool) {
 	if !ok {
 		marker = m.styles.toolErr.Render(" ✗")
 	}
-	fmt.Fprintf(&m.transcript, "%s\n", marker)
+	fmt.Fprintf(m.transcript, "%s\n", marker)
 	m.pushViewport()
 }
 
