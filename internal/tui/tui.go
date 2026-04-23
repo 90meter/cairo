@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/muesli/termenv"
 
@@ -149,6 +150,15 @@ type model struct {
 	streaming bool
 	cancel    context.CancelFunc
 
+	// Render-on-complete: tokens stream into the transcript (styled) for
+	// live feedback, but their raw text is also captured here so finish-
+	// Assistant can splice the streamed region out and replace it with a
+	// markdown-rendered version. streamingStart records the byte offset in
+	// transcript where the current turn's body began (just after the
+	// "Selene: " prefix).
+	streamingRaw   *strings.Builder
+	streamingStart int
+
 	// Identity / status
 	aiName      string
 	memoryCount int
@@ -226,16 +236,17 @@ func newModel(a *agent.Agent, database *db.DB, sess *db.Session) model {
 	ch, unsub := a.Bus().Subscribe()
 
 	m := model{
-		agent:      a,
-		db:         database,
-		session:    sess,
-		input:      ti,
-		aiName:     aiName,
-		commands:   defaultCommands(),
-		eventCh:    ch,
-		unsub:      unsub,
-		styles:     newStyles(sess.Role),
-		transcript: &strings.Builder{},
+		agent:        a,
+		db:           database,
+		session:      sess,
+		input:        ti,
+		aiName:       aiName,
+		commands:     defaultCommands(),
+		eventCh:      ch,
+		unsub:        unsub,
+		styles:       newStyles(sess.Role),
+		transcript:   &strings.Builder{},
+		streamingRaw: &strings.Builder{},
 	}
 	m.refreshCounts()
 	return m
@@ -911,17 +922,57 @@ func (m *model) startAssistant() {
 	fmt.Fprintf(m.transcript, "%s",
 		m.styles.voiceSelene.Render(m.aiName+": "))
 	m.streaming = true
+	m.streamingRaw.Reset()
+	m.streamingStart = m.transcript.Len()
 	m.pushViewport()
 }
 
 func (m *model) appendAssistantToken(tok string) {
 	m.transcript.WriteString(m.styles.body.Render(tok))
+	m.streamingRaw.WriteString(tok)
 	m.pushViewport()
 }
 
 func (m *model) finishAssistant() {
+	raw := m.streamingRaw.String()
+	if rendered, ok := renderMarkdown(raw, m.width); ok {
+		// Splice out the streamed (raw, styled) region and replace with
+		// the markdown-rendered version.
+		current := m.transcript.String()
+		m.transcript.Reset()
+		m.transcript.WriteString(current[:m.streamingStart])
+		m.transcript.WriteString(rendered)
+	}
 	m.transcript.WriteString("\n\n")
+	m.streamingRaw.Reset()
 	m.pushViewport()
+}
+
+// renderMarkdown runs the assistant's raw text through glamour to produce
+// ANSI-styled output (bold, italics, code blocks, lists, headers). Returns
+// ok=false if rendering fails or the text is empty — callers fall back to
+// the already-streamed raw text in that case.
+func renderMarkdown(text string, width int) (string, bool) {
+	if strings.TrimSpace(text) == "" {
+		return "", false
+	}
+	if width <= 0 {
+		width = 80
+	}
+	r, err := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(width),
+	)
+	if err != nil {
+		return "", false
+	}
+	out, err := r.Render(text)
+	if err != nil {
+		return "", false
+	}
+	// Glamour adds leading/trailing whitespace for visual breathing room;
+	// we add our own \n\n separator in finishAssistant, so trim here.
+	return strings.Trim(out, "\n"), true
 }
 
 func (m *model) appendToolStart(name, argsPreview string) {
