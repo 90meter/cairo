@@ -130,6 +130,32 @@ func (q *SummaryQ) Search(query []float32, k int) ([]*Summary, error) {
 	return out, nil
 }
 
+func (q *SummaryQ) All() ([]*Summary, error) {
+	rows, err := q.db.Query(
+		`SELECT id, session_id, content, embedding, covers_from, covers_through, created_at
+		 FROM summaries ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Summary
+	for rows.Next() {
+		s, err := scanSummary(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, s)
+	}
+	return out, rows.Err()
+}
+
+func (q *SummaryQ) Update(id int64, content string, embedding []float32) error {
+	_, err := q.db.Exec(
+		`UPDATE summaries SET content = ?, embedding = ? WHERE id = ?`,
+		content, encodeEmbedding(embedding), id)
+	return err
+}
+
 func scanSummary(row scanner) (*Summary, error) {
 	var s Summary
 	var createdAt int64
@@ -179,6 +205,29 @@ func (q *FactQ) ForSession(sessionID int64) ([]*Fact, error) {
 		out = append(out, f)
 	}
 	return out, rows.Err()
+}
+
+func (q *FactQ) All() ([]*Fact, error) {
+	rows, err := q.db.Query(
+		`SELECT id, session_id, summary_id, content, embedding, created_at FROM facts ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var out []*Fact
+	for rows.Next() {
+		f, err := scanFact(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}
+
+func (q *FactQ) Delete(id int64) error {
+	_, err := q.db.Exec(`DELETE FROM facts WHERE id = ?`, id)
+	return err
 }
 
 func scanFact(row scanner) (*Fact, error) {

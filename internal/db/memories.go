@@ -117,6 +117,13 @@ func (q *MemoryQ) Update(id int64, content string) error {
 	return err
 }
 
+func (q *MemoryQ) UpdateWithEmbedding(id int64, content string, embedding []float32) error {
+	_, err := q.db.Exec(
+		`UPDATE memories SET content = ?, embedding = ?, updated_at = unixepoch() WHERE id = ?`,
+		content, encodeEmbedding(embedding), id)
+	return err
+}
+
 // Search returns the top-k memories by cosine similarity to the query embedding.
 // Pure Go — no CGO required. Fine for hundreds to low-thousands of memories.
 func (q *MemoryQ) Search(query []float32, k int) ([]*Memory, error) {

@@ -97,6 +97,13 @@ func (db *DB) seedRoles() error {
 			"role:reviewer",
 			`["read","bash","grep","find","ls","memory","note","task"]`,
 		},
+		{
+			"dream",
+			"Headless maintenance mode — reviews and consolidates memories, facts, and summaries",
+			"",
+			"",
+			`["memory","summary_search","fact_promote","fact_list","summary_rewrite","note"]`,
+		},
 	}
 
 	for _, r := range roles {

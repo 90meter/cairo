@@ -154,10 +154,22 @@ func (t memoryTool) doUpdate(args map[string]any) agent.ToolResult {
 	if id == 0 || content == "" {
 		return agent.ToolResult{Content: "error: id and content are required for update", IsError: true}
 	}
-	if err := t.db.Memories.Update(id, content); err != nil {
+
+	var embedding []float32
+	if t.embedder != nil && t.embedModel != "" {
+		if vec, err := t.embedder.Embed(t.embedModel, content); err == nil {
+			embedding = vec
+		}
+	}
+
+	if err := t.db.Memories.UpdateWithEmbedding(id, content, embedding); err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
 	}
-	return agent.ToolResult{Content: fmt.Sprintf("memory %d updated", id)}
+	suffix := ""
+	if len(embedding) > 0 {
+		suffix = fmt.Sprintf(" (%d-dim embedding)", len(embedding))
+	}
+	return agent.ToolResult{Content: fmt.Sprintf("memory %d updated%s", id, suffix)}
 }
 
 func (t memoryTool) doDelete(args map[string]any) agent.ToolResult {

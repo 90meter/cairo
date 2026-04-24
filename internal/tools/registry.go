@@ -34,6 +34,8 @@ func Default(database *db.DB, embedder Embedder, embedModel string) []agent.Tool
 			// summaries + facts
 		SummarySearch(database, embedder, embedModel),
 		FactPromote(database, embedder, embedModel),
+		FactList(database),
+		SummaryRewrite(database, embedder, embedModel),
 			// custom tools (consolidated — list/create/delete)
 		CustomTool(database),
 			// skills (consolidated — list/read/create/update/delete)

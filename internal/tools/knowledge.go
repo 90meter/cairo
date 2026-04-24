@@ -135,3 +135,90 @@ func (t factPromoteTool) Execute(args map[string]any, _ *agent.ToolContext) agen
 	}
 }
 
+// --- fact_list ---
+
+type factListTool struct {
+	db *db.DB
+}
+
+func FactList(database *db.DB) agent.Tool {
+	return factListTool{db: database}
+}
+
+func (factListTool) Name() string { return "fact_list" }
+func (factListTool) Description() string {
+	return "List all facts across all sessions. Facts are atomic observations extracted during summarization."
+}
+func (factListTool) Parameters() map[string]any {
+	return map[string]any{
+		"type":       "object",
+		"properties": map[string]any{},
+	}
+}
+
+func (t factListTool) Execute(_ map[string]any, _ *agent.ToolContext) agent.ToolResult {
+	facts, err := t.db.Facts.All()
+	if err != nil {
+		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
+	}
+	if len(facts) == 0 {
+		return agent.ToolResult{Content: "no facts stored"}
+	}
+	var b strings.Builder
+	for _, f := range facts {
+		fmt.Fprintf(&b, "[%d] (session %d) %s\n", f.ID, f.SessionID, f.Content)
+	}
+	return agent.ToolResult{Content: strings.TrimSpace(b.String()), Details: facts}
+}
+
+// --- summary_rewrite ---
+
+type summaryRewriteTool struct {
+	db         *db.DB
+	embedder   Embedder
+	embedModel string
+}
+
+func SummaryRewrite(database *db.DB, embedder Embedder, embedModel string) agent.Tool {
+	return summaryRewriteTool{db: database, embedder: embedder, embedModel: embedModel}
+}
+
+func (summaryRewriteTool) Name() string { return "summary_rewrite" }
+func (summaryRewriteTool) Description() string {
+	return "Rewrite a session summary's content and re-embed it. Use this during maintenance to consolidate or correct old summaries."
+}
+func (summaryRewriteTool) Parameters() map[string]any {
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"id":      prop("integer", "ID of the summary to rewrite"),
+			"content": prop("string", "New content for the summary"),
+		},
+		"required": []string{"id", "content"},
+	}
+}
+
+func (t summaryRewriteTool) Execute(args map[string]any, _ *agent.ToolContext) agent.ToolResult {
+	id := int64(intArg(args, "id", 0))
+	content := strArg(args, "content")
+	if id == 0 || content == "" {
+		return agent.ToolResult{Content: "error: id and content are required", IsError: true}
+	}
+
+	var embedding []float32
+	if t.embedder != nil && t.embedModel != "" {
+		if vec, err := t.embedder.Embed(t.embedModel, content); err == nil {
+			embedding = vec
+		}
+	}
+
+	if err := t.db.Summaries.Update(id, content, embedding); err != nil {
+		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
+	}
+	suffix := ""
+	if len(embedding) > 0 {
+		suffix = fmt.Sprintf(" (%d-dim embedding)", len(embedding))
+	}
+	return agent.ToolResult{Content: fmt.Sprintf("summary %d rewritten%s", id, suffix)}
+}
+
