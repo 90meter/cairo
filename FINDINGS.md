@@ -53,4 +53,14 @@ _Note: track this, especially if we add any async tool execution later._
 
 ---
 
+---
+
+## cmd/cairo/ (package structure)
+
+**[nice] main.go has too many concerns**
+`main.go` currently contains: subcommand dispatch, startup sequence, `runTask`, `collectArtifacts`, `runDream`, `resolveSession`, `resolveOllamaURL`, `connectOllama`, `fatalf`. `wizard.go` and `bundle.go` already exist showing the intent to split things out, but it was never finished.
+_Fix: split into `startup.go` (connectOllama, resolveSession, resolveOllamaURL), `task.go` (runTask, collectArtifacts), `dream.go` (runDream). Leave main.go as pure dispatch + fatalf._
+
+---
+
 ## (more to come as walkthrough continues)
