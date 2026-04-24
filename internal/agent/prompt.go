@@ -9,6 +9,7 @@ import (
 
 	"github.com/scotmcc/cairo/internal/db"
 	"github.com/scotmcc/cairo/internal/llm"
+	"github.com/scotmcc/cairo/internal/providers"
 )
 
 // templateRe matches {{name}} where name is a simple identifier (letters,
@@ -33,7 +34,7 @@ func applyTemplates(s string, vars map[string]string) string {
 //
 // Structure:
 //  1. Base parts (trigger IS NULL), ordered by load_order
-//  2. Environment hints (wsh, VS Code, shell)
+//  2. Environment context from registered providers (wsh, VS Code, shell, git, …)
 //  3. Soul — the AI's self-maintained persona (from config.soul_prompt)
 //  4. Role addendum (trigger = "role:<roleName>")
 //  5. Tool addenda (trigger = "tool:<toolName>") for each active tool
@@ -42,11 +43,8 @@ func applyTemplates(s string, vars map[string]string) string {
 //  8. Recent memories (capped)
 //  9. Date + cwd stamp
 // 10. Template substitution ({{key}} → config values)
-func BuildSystemPrompt(database *db.DB, sessionID int64, roleName, cwd string, tools []Tool, lastActive time.Time) (llm.Message, error) {
+func BuildSystemPrompt(database *db.DB, sessionID int64, roleName, cwd string, tools []Tool, lastActive time.Time, reg *providers.Registry) (llm.Message, error) {
 	var b strings.Builder
-
-	// 0. Detect environment.
-	env := detectEnvironment()
 
 	// 1. base parts
 	base, err := database.Prompts.Base()
@@ -58,17 +56,10 @@ func BuildSystemPrompt(database *db.DB, sessionID int64, roleName, cwd string, t
 		b.WriteString("\n\n")
 	}
 
-	// 2. Environment hints — detect wsh, VS Code, and shell, append directly.
-	if env.IsWsh {
-		b.WriteString("You are running within Wave Terminal (wsh). Use `wsh view <file>`, `wsh edit <file>`, or `wsh browser <url>` to collaborate. Run `wsh -h` to learn more about available commands.\n\n")
-	}
-
-	if env.IsVsCode {
-		b.WriteString("You are running within VS Code. Use `code -r <file>` to open files, `code <dir>` to open folders. Run `code --help` to learn more.\n\n")
-	}
-
-	if env.Shell != "" {
-		b.WriteString("You are running in " + env.Shell + ".\n\n")
+	// 2. Environment context from registered providers (wsh, VS Code, shell, git, …).
+	if ctx := reg.GetContext(cwd); ctx != "" {
+		b.WriteString(ctx)
+		b.WriteByte('\n')
 	}
 
 	// 3. soul — self-maintained persona

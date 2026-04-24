@@ -20,6 +20,7 @@ import (
 	"github.com/muesli/reflow/wordwrap"
 
 	"github.com/scotmcc/cairo/internal/agent"
+	"github.com/scotmcc/cairo/internal/providers"
 )
 
 const panelPromptID panelID = "prompt"
@@ -87,7 +88,7 @@ func promptClose(m *model) {
 // loads it into the viewport. Called on open, on 'r', and on a resize
 // (to re-wrap at the new width).
 func promptRefresh(m *model) {
-	msg, err := agent.BuildSystemPrompt(m.db, m.session.ID, m.session.Role, m.session.CWD, nil, time.Time{})
+	msg, err := agent.BuildSystemPrompt(m.db, m.session.ID, m.session.Role, m.session.CWD, nil, time.Time{}, providers.Default())
 	if err != nil {
 		m.prompt.content = fmt.Sprintf("error building prompt: %v", err)
 		m.prompt.tokens = 0

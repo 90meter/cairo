@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/scotmcc/cairo/internal/db"
+	"github.com/scotmcc/cairo/internal/providers"
 )
 
 // openTestDB is a local copy of the db package's test helper, since tests in
@@ -38,7 +39,7 @@ func TestBuildSystemPrompt_IncludesBaseAndRole(t *testing.T) {
 	d := openTestDB(t)
 	sid := seedSession(t, d)
 
-	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{})
+	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{}, providers.Default())
 	if err != nil {
 		t.Fatalf("BuildSystemPrompt: %v", err)
 	}
@@ -67,7 +68,7 @@ func TestBuildSystemPrompt_TemplateSubstitution(t *testing.T) {
 		t.Fatalf("set ai_name: %v", err)
 	}
 
-	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{})
+	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{}, providers.Default())
 	if err != nil {
 		t.Fatalf("BuildSystemPrompt: %v", err)
 	}
@@ -121,7 +122,7 @@ func TestBuildSystemPrompt_MemoryOverflowHint(t *testing.T) {
 		}
 	}
 
-	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{})
+	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{}, providers.Default())
 	if err != nil {
 		t.Fatalf("BuildSystemPrompt: %v", err)
 	}
@@ -142,7 +143,7 @@ func TestBuildSystemPrompt_SummariesSectionCapsAtContextLimit(t *testing.T) {
 		}
 	}
 
-	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{})
+	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{}, providers.Default())
 	if err != nil {
 		t.Fatalf("BuildSystemPrompt: %v", err)
 	}

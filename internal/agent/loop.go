@@ -7,6 +7,7 @@ import (
 
 	"github.com/scotmcc/cairo/internal/db"
 	"github.com/scotmcc/cairo/internal/llm"
+	"github.com/scotmcc/cairo/internal/providers"
 )
 
 type loopConfig struct {
@@ -15,8 +16,9 @@ type loopConfig struct {
 	tools         []Tool
 	llm           *llm.Client
 	bus           *Bus
-	db            *db.DB // passed to ToolContext for tools that need DB access (e.g. unsafe_mode check)
-	session       *db.Session // threaded into ToolContext so self-inspection tools can rebuild prompt
+	db            *db.DB          // passed to ToolContext for tools that need DB access (e.g. unsafe_mode check)
+	session       *db.Session     // threaded into ToolContext so self-inspection tools can rebuild prompt
+	registry      *providers.Registry // threaded into ToolContext for prompt_show and similar tools
 	persist       func(role, content, toolCallsJSON, toolName, toolID string)
 	workDir       string
 	buildPrompt   func() (llm.Message, error)
@@ -54,12 +56,13 @@ func runLoop(ctx context.Context, cfg loopConfig) error {
 		toolMap[t.Name()] = t
 	}
 	tc := &ToolContext{
-		Ctx:     ctx,
-		WorkDir: cfg.workDir,
-		DB:      cfg.db,
-		Bus:     cfg.bus,
-		Session: cfg.session,
-		Tools:   cfg.tools,
+		Ctx:      ctx,
+		WorkDir:  cfg.workDir,
+		DB:       cfg.db,
+		Bus:      cfg.bus,
+		Session:  cfg.session,
+		Tools:    cfg.tools,
+		Registry: cfg.registry,
 	}
 
 	callSeq := 0 // for synthetic tool call IDs

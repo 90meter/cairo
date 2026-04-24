@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/scotmcc/cairo/internal/agent"
+	"github.com/scotmcc/cairo/internal/providers"
 )
 
 // --- prompt_show ---
@@ -35,7 +36,11 @@ func (promptShowTool) Execute(_ map[string]any, ctx *agent.ToolContext) agent.To
 	if ctx.Session == nil {
 		return agent.ToolResult{Content: "error: prompt_show requires a session context", IsError: true}
 	}
-	msg, err := agent.BuildSystemPrompt(ctx.DB, ctx.Session.ID, ctx.Session.Role, ctx.WorkDir, ctx.Tools, time.Time{})
+	reg := ctx.Registry
+	if reg == nil {
+		reg = providers.Default()
+	}
+	msg, err := agent.BuildSystemPrompt(ctx.DB, ctx.Session.ID, ctx.Session.Role, ctx.WorkDir, ctx.Tools, time.Time{}, reg)
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error building prompt: %v", err), IsError: true}
 	}

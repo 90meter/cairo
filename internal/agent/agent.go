@@ -9,16 +9,18 @@ import (
 
 	"github.com/scotmcc/cairo/internal/db"
 	"github.com/scotmcc/cairo/internal/llm"
+	"github.com/scotmcc/cairo/internal/providers"
 )
 
 // Agent is the stateful wrapper around the agent loop.
 type Agent struct {
-	db      *db.DB
-	llm     *llm.Client
-	model   string
-	session *db.Session
-	tools   []Tool
-	bus     *Bus
+	db       *db.DB
+	llm      *llm.Client
+	model    string
+	session  *db.Session
+	tools    []Tool
+	bus      *Bus
+	registry *providers.Registry
 
 	lastActiveBeforeTurn time.Time // captured before Touch() each turn — used for temporal awareness
 
@@ -32,23 +34,29 @@ type Agent struct {
 
 // Config is passed to New.
 type Config struct {
-	DB      *db.DB
-	LLM     *llm.Client
-	Model   string
-	Session *db.Session
-	Tools   []Tool
+	DB       *db.DB
+	LLM      *llm.Client
+	Model    string
+	Session  *db.Session
+	Tools    []Tool
+	Registry *providers.Registry // nil falls back to providers.Default()
 	// SystemPrompt removed — the prompt is now rebuilt dynamically each turn
 }
 
 // New creates an Agent and loads the session's message history from the DB.
 func New(cfg Config) (*Agent, error) {
+	reg := cfg.Registry
+	if reg == nil {
+		reg = providers.Default()
+	}
 	a := &Agent{
-		db:      cfg.DB,
-		llm:     cfg.LLM,
-		model:   cfg.Model,
-		session: cfg.Session,
-		tools:   cfg.Tools,
-		bus:     &Bus{},
+		db:       cfg.DB,
+		llm:      cfg.LLM,
+		model:    cfg.Model,
+		session:  cfg.Session,
+		tools:    cfg.Tools,
+		bus:      &Bus{},
+		registry: reg,
 	}
 	if err := a.loadHistory(); err != nil {
 		return nil, err
@@ -108,6 +116,7 @@ func (a *Agent) Prompt(ctx context.Context, text string) error {
 		bus:           a.bus,
 		db:            a.db,
 		session:       a.session,
+		registry:      a.registry,
 		persist:       a.persistMessage,
 		workDir:       a.session.CWD,
 		buildPrompt:   a.buildSystemPrompt,
@@ -217,7 +226,7 @@ func (a *Agent) IsStreaming() bool {
 // buildSystemPrompt is the closure passed to loopConfig.buildPrompt.
 // Called fresh at the start of every outer loop iteration.
 func (a *Agent) buildSystemPrompt() (llm.Message, error) {
-	return BuildSystemPrompt(a.db, a.session.ID, a.session.Role, a.session.CWD, a.tools, a.lastActiveBeforeTurn)
+	return BuildSystemPrompt(a.db, a.session.ID, a.session.Role, a.session.CWD, a.tools, a.lastActiveBeforeTurn, a.registry)
 }
 
 func (a *Agent) drainSteering() []llm.Message {

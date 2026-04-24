@@ -5,6 +5,7 @@ import (
 
 	"github.com/scotmcc/cairo/internal/db"
 	"github.com/scotmcc/cairo/internal/llm"
+	"github.com/scotmcc/cairo/internal/providers"
 )
 
 // Tool is the interface every built-in and custom tool must satisfy.
@@ -29,12 +30,13 @@ type ToolResult struct {
 // Both may be nil in contexts that don't have an Agent (e.g. future
 // standalone tool invocation); tools must guard for that.
 type ToolContext struct {
-	Ctx     context.Context
-	WorkDir string
-	DB      *db.DB
-	Bus     *Bus // tools can publish progress updates
-	Session *db.Session
-	Tools   []Tool
+	Ctx      context.Context
+	WorkDir  string
+	DB       *db.DB
+	Bus      *Bus // tools can publish progress updates
+	Session  *db.Session
+	Tools    []Tool
+	Registry *providers.Registry // may be nil; callers should fall back to providers.Default()
 }
 
 // ToLLM converts a Tool to the llm.ToolDef wire format.
