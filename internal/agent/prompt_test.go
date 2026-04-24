@@ -4,6 +4,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/scotmcc/cairo/internal/db"
 )
@@ -37,7 +38,7 @@ func TestBuildSystemPrompt_IncludesBaseAndRole(t *testing.T) {
 	d := openTestDB(t)
 	sid := seedSession(t, d)
 
-	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil)
+	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{})
 	if err != nil {
 		t.Fatalf("BuildSystemPrompt: %v", err)
 	}
@@ -66,7 +67,7 @@ func TestBuildSystemPrompt_TemplateSubstitution(t *testing.T) {
 		t.Fatalf("set ai_name: %v", err)
 	}
 
-	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil)
+	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{})
 	if err != nil {
 		t.Fatalf("BuildSystemPrompt: %v", err)
 	}
@@ -120,7 +121,7 @@ func TestBuildSystemPrompt_MemoryOverflowHint(t *testing.T) {
 		}
 	}
 
-	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil)
+	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{})
 	if err != nil {
 		t.Fatalf("BuildSystemPrompt: %v", err)
 	}
@@ -141,7 +142,7 @@ func TestBuildSystemPrompt_SummariesSectionCapsAtContextLimit(t *testing.T) {
 		}
 	}
 
-	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil)
+	msg, err := BuildSystemPrompt(d, sid, "thinking_partner", "/tmp", nil, time.Time{})
 	if err != nil {
 		t.Fatalf("BuildSystemPrompt: %v", err)
 	}

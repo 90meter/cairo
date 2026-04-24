@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/scotmcc/cairo/internal/db"
 	"github.com/scotmcc/cairo/internal/llm"
@@ -19,6 +20,8 @@ type Agent struct {
 	session *db.Session
 	tools   []Tool
 	bus     *Bus
+
+	lastActiveBeforeTurn time.Time // captured before Touch() each turn — used for temporal awareness
 
 	mu          sync.Mutex
 	history     []llm.Message // user/assistant/tool only — system prompt is NOT stored here
@@ -95,6 +98,7 @@ func (a *Agent) Prompt(ctx context.Context, text string) error {
 		return err
 	}
 	a.history = append(a.history, llm.Message{Role: "user", Content: text})
+	a.lastActiveBeforeTurn = a.session.LastActive
 	_ = a.db.Sessions.Touch(a.session.ID)
 
 	return runLoop(ctx, loopConfig{
@@ -214,7 +218,7 @@ func (a *Agent) IsStreaming() bool {
 // buildSystemPrompt is the closure passed to loopConfig.buildPrompt.
 // Called fresh at the start of every outer loop iteration.
 func (a *Agent) buildSystemPrompt() (llm.Message, error) {
-	return BuildSystemPrompt(a.db, a.session.ID, a.session.Role, a.session.CWD, a.tools)
+	return BuildSystemPrompt(a.db, a.session.ID, a.session.Role, a.session.CWD, a.tools, a.lastActiveBeforeTurn)
 }
 
 func (a *Agent) drainSteering() []llm.Message {
@@ -264,7 +268,62 @@ func (a *Agent) loadHistory() error {
 			a.history = append(a.history, llm.Message{Role: m.Role, Content: m.Content})
 		}
 	}
+
+	// Detect incomplete turns: if the process crashed mid-turn, the DB may
+	// contain an assistant tool-call row followed by fewer tool-result rows
+	// than there are tool calls. This produces an invalid message sequence
+	// for the LLM (mismatched call/result counts). Strip the incomplete turn
+	// and inject a system note so the resumed session starts from a clean state.
+	a.history = repairIncompleteTurn(a.history)
+
 	return nil
+}
+
+// repairIncompleteTurn scans the tail of history for a partially-executed
+// tool-call turn and strips it if found. A turn is incomplete when the last
+// assistant message has N tool calls but is followed by fewer than N tool
+// results. In that case the incomplete turn is removed and a system note is
+// appended so the LLM knows the previous session was interrupted.
+func repairIncompleteTurn(history []llm.Message) []llm.Message {
+	n := len(history)
+	if n == 0 {
+		return history
+	}
+
+	// Count trailing tool-result messages.
+	trailingTools := 0
+	for i := n - 1; i >= 0; i-- {
+		if history[i].Role == "tool" {
+			trailingTools++
+		} else {
+			break
+		}
+	}
+
+	// The message immediately before the trailing tool results must be an
+	// assistant message with tool calls for there to be anything to repair.
+	assistantIdx := n - 1 - trailingTools
+	if assistantIdx < 0 {
+		return history
+	}
+	asst := history[assistantIdx]
+	if asst.Role != "assistant" || len(asst.ToolCalls) == 0 {
+		return history
+	}
+
+	// If all tool calls have corresponding results, the turn is complete.
+	if trailingTools >= len(asst.ToolCalls) {
+		return history
+	}
+
+	// Incomplete: strip the assistant tool-call row and any partial results,
+	// then append a system note so the LLM resumes with clean context.
+	repaired := history[:assistantIdx]
+	repaired = append(repaired, llm.Message{
+		Role:    "system",
+		Content: "[system] Note: the previous session was interrupted mid-turn. The last tool call sequence did not complete. Please acknowledge and ask how to proceed.",
+	})
+	return repaired
 }
 
 // persistMessage is called by runLoop for every message produced during a turn.

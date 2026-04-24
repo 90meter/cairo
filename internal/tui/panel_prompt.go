@@ -12,6 +12,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/viewport"
 	tea "github.com/charmbracelet/bubbletea"
@@ -86,7 +87,7 @@ func promptClose(m *model) {
 // loads it into the viewport. Called on open, on 'r', and on a resize
 // (to re-wrap at the new width).
 func promptRefresh(m *model) {
-	msg, err := agent.BuildSystemPrompt(m.db, m.session.ID, m.session.Role, m.session.CWD, nil)
+	msg, err := agent.BuildSystemPrompt(m.db, m.session.ID, m.session.Role, m.session.CWD, nil, time.Time{})
 	if err != nil {
 		m.prompt.content = fmt.Sprintf("error building prompt: %v", err)
 		m.prompt.tokens = 0

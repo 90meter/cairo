@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/scotmcc/cairo/internal/agent"
 )
@@ -34,7 +35,7 @@ func (promptShowTool) Execute(_ map[string]any, ctx *agent.ToolContext) agent.To
 	if ctx.Session == nil {
 		return agent.ToolResult{Content: "error: prompt_show requires a session context", IsError: true}
 	}
-	msg, err := agent.BuildSystemPrompt(ctx.DB, ctx.Session.ID, ctx.Session.Role, ctx.WorkDir, ctx.Tools)
+	msg, err := agent.BuildSystemPrompt(ctx.DB, ctx.Session.ID, ctx.Session.Role, ctx.WorkDir, ctx.Tools, time.Time{})
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error building prompt: %v", err), IsError: true}
 	}

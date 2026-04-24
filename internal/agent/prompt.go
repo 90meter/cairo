@@ -42,7 +42,7 @@ func applyTemplates(s string, vars map[string]string) string {
 //  8. Recent memories (capped)
 //  9. Date + cwd stamp
 // 10. Template substitution ({{key}} → config values)
-func BuildSystemPrompt(database *db.DB, sessionID int64, roleName, cwd string, tools []Tool) (llm.Message, error) {
+func BuildSystemPrompt(database *db.DB, sessionID int64, roleName, cwd string, tools []Tool, lastActive time.Time) (llm.Message, error) {
 	var b strings.Builder
 
 	// 0. Detect environment.
@@ -161,7 +161,51 @@ func BuildSystemPrompt(database *db.DB, sessionID int64, roleName, cwd string, t
 		b.WriteByte('\n')
 	}
 
-	// 8. stamp
+	// 8. temporal context — inject a note about elapsed time since last interaction.
+	// Ephemeral: never persisted. Under 5 min: silent (same working session).
+	// 5–30 min: brief note. Over 30 min: full note with acknowledgment prompt.
+	if !lastActive.IsZero() {
+		elapsed := time.Since(lastActive)
+		switch {
+		case elapsed >= 30*time.Minute:
+			hours := int(elapsed.Hours())
+			minutes := int(elapsed.Minutes()) % 60
+			var dur string
+			if hours >= 24 {
+				days := hours / 24
+				dur = fmt.Sprintf("%d day", days)
+				if days != 1 {
+					dur += "s"
+				}
+			} else if hours > 0 {
+				dur = fmt.Sprintf("%d hour", hours)
+				if hours != 1 {
+					dur += "s"
+				}
+				if minutes > 0 {
+					dur += fmt.Sprintf(" %d minute", minutes)
+					if minutes != 1 {
+						dur += "s"
+					}
+				}
+			} else {
+				dur = fmt.Sprintf("%d minute", int(elapsed.Minutes()))
+				if int(elapsed.Minutes()) != 1 {
+					dur += "s"
+				}
+			}
+			fmt.Fprintf(&b, "[%s have passed since your last interaction. If the context or plan may have changed, acknowledge this before continuing.]\n\n", dur)
+		case elapsed >= 5*time.Minute:
+			minutes := int(elapsed.Minutes())
+			dur := fmt.Sprintf("%d minute", minutes)
+			if minutes != 1 {
+				dur += "s"
+			}
+			fmt.Fprintf(&b, "[Note: %s have passed since your last interaction.]\n\n", dur)
+		}
+	}
+
+	// 9. stamp
 	b.WriteString(fmt.Sprintf("Date: %s\nWorking directory: %s\n",
 		time.Now().Format("2006-01-02 15:04 MST"), cwd))
 
