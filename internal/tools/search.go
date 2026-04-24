@@ -50,7 +50,7 @@ func (t searchTool) Execute(args map[string]any, ctx *agent.ToolContext) agent.T
 	baseURL, err := t.db.Config.Get("searxng_url")
 	if err != nil || baseURL == "" {
 		return agent.ToolResult{
-			Content: "searxng_url not configured — run: config set searxng_url http://your-searxng-host",
+			Content: "searxng_url is not configured. Ask the user for their SearXNG URL, then set it with: config set searxng_url <value>",
 			IsError: true,
 		}
 	}

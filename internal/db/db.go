@@ -69,7 +69,10 @@ func OpenAt(path string) (*DB, error) {
 		sqldb.Close()
 		return nil, err
 	}
-	applyMigrations(sqldb)
+	if err := applyMigrations(sqldb); err != nil {
+		sqldb.Close()
+		return nil, fmt.Errorf("migrate: %w", err)
+	}
 
 	db := &DB{sql: sqldb}
 	db.Config = &ConfigQ{db: sqldb}
@@ -118,10 +121,29 @@ func execSchema(sqldb *sql.DB, s string) error {
 	return nil
 }
 
-func applyMigrations(sqldb *sql.DB) {
-	for _, m := range migrations {
-		sqldb.Exec(m)
+func applyMigrations(sqldb *sql.DB) error {
+	// Read current schema version. user_version starts at 0 on a new DB,
+	// meaning no migrations have been applied yet.
+	var version int
+	if err := sqldb.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
+		return fmt.Errorf("read user_version: %w", err)
 	}
+
+	for i, m := range migrations {
+		if i < version {
+			continue // already applied
+		}
+		if _, err := sqldb.Exec(m); err != nil {
+			return fmt.Errorf("migration %d: %w", i, err)
+		}
+		// Bump user_version immediately after each successful migration so a
+		// crash mid-run leaves the DB in a consistent, resumable state.
+		// PRAGMA user_version does not support query parameters.
+		if _, err := sqldb.Exec(fmt.Sprintf("PRAGMA user_version = %d", i+1)); err != nil {
+			return fmt.Errorf("bump user_version to %d: %w", i+1, err)
+		}
+	}
+	return nil
 }
 
 // seed inserts default data on first run (idempotent).

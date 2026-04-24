@@ -204,4 +204,22 @@ var migrations = []string{
 	`INSERT OR IGNORE INTO config(key, value)
 	 SELECT 'init_complete',
 	        CASE WHEN EXISTS (SELECT 1 FROM memories LIMIT 1) THEN 'true' ELSE 'false' END`,
+
+	// Grant search, fetch, fact_list, and summary_rewrite to existing roles.
+	`UPDATE roles SET tools = json_insert(tools, '$[#]', 'search')
+	 WHERE name IN ('thinking_partner','planner')
+	   AND NOT EXISTS (SELECT 1 FROM json_each(roles.tools) WHERE value = 'search')`,
+	`UPDATE roles SET tools = json_insert(tools, '$[#]', 'fetch')
+	 WHERE name IN ('thinking_partner','planner')
+	   AND NOT EXISTS (SELECT 1 FROM json_each(roles.tools) WHERE value = 'fetch')`,
+	`UPDATE roles SET tools = json_insert(tools, '$[#]', 'fact_list')
+	 WHERE name = 'thinking_partner'
+	   AND NOT EXISTS (SELECT 1 FROM json_each(roles.tools) WHERE value = 'fact_list')`,
+	`UPDATE roles SET tools = json_insert(tools, '$[#]', 'summary_rewrite')
+	 WHERE name = 'thinking_partner'
+	   AND NOT EXISTS (SELECT 1 FROM json_each(roles.tools) WHERE value = 'summary_rewrite')`,
+
+	// Wire the dream role to its prompt and ensure the prompt exists.
+	`UPDATE roles SET base_prompt_key = 'role:dream' WHERE name = 'dream' AND (base_prompt_key IS NULL OR base_prompt_key = '')`,
+	`INSERT OR IGNORE INTO config(key, value) VALUES('searxng_url', '')`,
 }
