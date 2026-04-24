@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/scotmcc/cairo/internal/db"
 	"github.com/scotmcc/cairo/internal/llm"
@@ -117,11 +116,11 @@ func runLoop(ctx context.Context, cfg loopConfig) error {
 			// Append to sendMsgs so the next StreamOnce has full context
 			sendMsgs = append(sendMsgs, llm.Message{Role: "assistant", ToolCalls: toolCalls})
 
-			for i, tc_call := range toolCalls {
+			for _, tcCall := range toolCalls {
 				callSeq++
-				callID := tc_call.CallID(callSeq)
-				args := tc_call.Args()
-				name := tc_call.Function.Name
+				callID := tcCall.CallID(callSeq)
+				args := tcCall.Args()
+				name := tcCall.Function.Name
 
 				cfg.bus.Publish(Event{Type: EventToolStart, Payload: PayloadToolStart{Name: name, Args: args}})
 
@@ -146,7 +145,6 @@ func runLoop(ctx context.Context, cfg loopConfig) error {
 				cfg.persist("tool", result.Content, "", name, callID)
 
 				// Append tool result to sendMsgs for next iteration
-				_ = i
 				sendMsgs = append(sendMsgs, llm.Message{
 					Role:    "tool",
 					Content: result.Content,
@@ -228,15 +226,3 @@ func marshalToolCalls(calls []llm.ToolCall, seqStart int) string {
 	return string(b)
 }
 
-// ContentPreview truncates tool output for readability in logs.
-func contentPreview(s string, max int) string {
-	if len(s) <= max {
-		return s
-	}
-	return s[:max] + fmt.Sprintf("… [%d bytes truncated]", len(s)-max)
-}
-
-func init() {
-	_ = contentPreview // suppress unused warning — used in future logging
-	_ = strings.Builder{}
-}

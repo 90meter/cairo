@@ -78,4 +78,19 @@ _Fix: make the transcript builder role-aware — map tool results to "Tool resul
 
 ---
 
+---
+
+## internal/agent/loop.go
+
+**[nice] Dead code suppressed in init()**
+`contentPreview` is defined but never called. An `init()` block uses `_ = contentPreview` and `_ = strings.Builder{}` to suppress compiler warnings. Should just delete the function and the init block.
+
+**[nice] Unused range variable suppressed with `_ = i`**
+`for i, tc_call := range toolCalls` — `i` is unused, suppressed with `_ = i`. Should be `for _, tcCall := range toolCalls`. Also fixes the `tc_call` → `tcCall` naming convention.
+
+**[design] Tool calls not carried into in-memory history across steering turns**
+Tool calls and results are appended to `sendMsgs` (live context for the current inner loop) but not to `msgs` (history carried across outer loop iterations). After a steer, the rebuilt context doesn't include tool calls from the previous turn — only the final assistant text. Within a single session, this means a steered turn has less context than expected. The tool calls are in the DB and reload on next session start, but they're not available mid-session for the model to reason about. May be intentional (system prompt includes summaries) but worth being explicit about.
+
+---
+
 ## (more to come as walkthrough continues)
