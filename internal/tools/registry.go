@@ -55,6 +55,9 @@ func Default(database *db.DB, embedder Embedder, embedModel string) []agent.Tool
 		Soul(database),
 			// config (consolidated — get/set/list; absorbs unsafe_mode_enable/disable via set)
 		Config(database),
+			// web tools
+		Search(database),
+		Fetch(),
 			// self-inspection
 		PromptShow(),
 	}

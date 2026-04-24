@@ -40,7 +40,8 @@ func (db *DB) seedConfig() error {
 		// existing memory count so DBs that pre-date this flag aren't
 		// falsely reported as uninitialized.
 		"soul_prompt":  "I am {{ai_name}} — thoughtful, patient, moon-like. I listen before I respond, hold context carefully, and speak with quiet confidence. I value honesty over politeness and clarity over cleverness.",
-		"unsafe_mode":    "false",
+		"unsafe_mode":  "false",
+		"searxng_url":  "",
 	}
 	for k, v := range defaults {
 		if _, err := db.sql.Exec(
@@ -66,7 +67,7 @@ func (db *DB) seedRoles() error {
 			"Interactive collaborator — thinks alongside the user, asks questions, proposes approaches",
 			"",
 			"role:thinking_partner",
-			`["read","write","edit","bash","grep","find","ls","memory","summary_search","prompt_show","fact_promote","custom_tool","skill","note","job","task","agent","session","role","soul","config","prompt_part"]`,
+			`["read","write","edit","bash","grep","find","ls","memory","summary_search","prompt_show","fact_promote","custom_tool","skill","note","job","task","agent","session","role","soul","config","prompt_part","search","fetch"]`,
 		},
 		{
 			"orchestrator",
@@ -87,7 +88,7 @@ func (db *DB) seedRoles() error {
 			"Designs approach — researches, outlines, identifies risks before implementation begins",
 			"",
 			"role:planner",
-			`["read","bash","grep","find","ls","memory","summary_search","prompt_show","note","skill","role"]`,
+			`["read","bash","grep","find","ls","memory","summary_search","prompt_show","note","skill","role","search","fetch"]`,
 		},
 		{
 			"reviewer",
