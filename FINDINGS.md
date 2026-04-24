@@ -111,4 +111,37 @@ Full table scan of config on every prompt build. Fine now, worth watching as con
 
 ---
 
+---
+
+## internal/tools/registry.go
+
+**[nice] customTool implementation belongs in custom_tool.go**
+`registry.go` contains ~150 lines of custom tool execution logic. The registry should only register and filter; execution belongs in `custom_tool.go` which already exists.
+
+**[hardening] Custom tool uses context.Background() — same bug as old bash.go**
+`customTool.Execute` builds its timeout from `context.Background()` not `tc.Ctx`. Ctrl-C won't cancel it, no process group killing. Same fix as bash.go: use `tc.Ctx`, set `Setpgid`, kill process group on timeout.
+
+**[nice] Config snapshot at construction time for custom tools**
+`db.Config.All()` is called when the tool is loaded at session start. Mid-session config changes are invisible to custom tools. Should call `db.Config.All()` at execute time instead.
+
+**[nice] Embedder + embedModel passed separately to 4+ tools**
+`(database, embedder, embedModel)` is a repeated signature across Memory, SummarySearch, FactPromote, SummaryRewrite. Could be wrapped in an `EmbedConfig` struct to reduce noise in `Default()`.
+
+---
+
+---
+
+## internal/tools/orchestration.go
+
+**[magic] Role defaults hardcoded inline**
+`role = "orchestrator"` and `role = "coder"` as fallback defaults in tool methods — same issue as schema defaults. Should be constants shared with the schema/seed layer.
+
+**[magic] Status strings not constants**
+`"pending"`, `"running"`, `"done"`, `"failed"`, `"blocked"`, `"cancelled"` scattered across descriptions, enums, and DB layer with no shared constants. Renaming a status value requires hunting across multiple files.
+
+**[nice] doUpdate uses two separate DB calls without a transaction**
+`SetStatus` then `SetResult` — if the second fails, status is updated but result isn't. Low risk, worth fixing if DB operations get more complex.
+
+---
+
 ## (more to come as walkthrough continues)
