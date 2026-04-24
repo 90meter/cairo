@@ -1,17 +1,13 @@
 package tools
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 
 	"github.com/scotmcc/cairo/internal/agent"
 	"github.com/scotmcc/cairo/internal/db"
 )
-
-// Embedder generates vector embeddings for text. The llm.Client satisfies this.
-type Embedder interface {
-	Embed(model, text string) ([]float32, error)
-}
 
 // memoryTool is the consolidated memory tool — replaces memory_add, memory_list,
 // memory_search, memory_update, memory_delete. Actions are dispatched on the
@@ -103,7 +99,7 @@ func (t memoryTool) doAdd(args map[string]any) agent.ToolResult {
 }
 
 func (t memoryTool) doList() agent.ToolResult {
-	memories, err := t.db.Memories.All()
+	memories, err := t.db.Memories.AllContent()
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
 	}
@@ -188,12 +184,13 @@ func formatTags(raw string) string {
 		return "[]"
 	}
 	parts := strings.Split(raw, ",")
-	quoted := make([]string, 0, len(parts))
+	tags := make([]string, 0, len(parts))
 	for _, p := range parts {
 		p = strings.TrimSpace(p)
 		if p != "" {
-			quoted = append(quoted, fmt.Sprintf("%q", p))
+			tags = append(tags, p)
 		}
 	}
-	return "[" + strings.Join(quoted, ",") + "]"
+	b, _ := json.Marshal(tags)
+	return string(b)
 }

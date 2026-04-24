@@ -90,7 +90,7 @@ func main() {
 
 	sessionRole := *roleFlag
 	if sessionRole == "" {
-		sessionRole = "thinking_partner"
+		sessionRole = db.RoleThinkingPartner
 	}
 	session, err := resolveSession(database, llmClient, &bgWg, *newSession, *sessionID, *sessionName, sessionRole)
 	if err != nil {

@@ -147,16 +147,41 @@ func FactList(database *db.DB) agent.Tool {
 
 func (factListTool) Name() string { return "fact_list" }
 func (factListTool) Description() string {
-	return "List all facts across all sessions. Facts are atomic observations extracted during summarization."
+	return `List or delete facts across all sessions. Facts are atomic observations extracted during summarization.
+Actions:
+- list: return all facts. No extra args.
+- delete: remove a fact by ID. Args: id (required).`
 }
 func (factListTool) Parameters() map[string]any {
 	return map[string]any{
-		"type":       "object",
-		"properties": map[string]any{},
+		"type": "object",
+		"properties": map[string]any{
+			"action": map[string]any{
+				"type":        "string",
+				"enum":        []string{"list", "delete"},
+				"description": "Operation to perform.",
+			},
+			"id": prop("integer", "Fact ID — required for delete."),
+		},
+		"required": []string{"action"},
 	}
 }
 
-func (t factListTool) Execute(_ map[string]any, _ *agent.ToolContext) agent.ToolResult {
+func (t factListTool) Execute(args map[string]any, _ *agent.ToolContext) agent.ToolResult {
+	switch strArg(args, "action") {
+	case "list", "":
+		return t.doList()
+	case "delete":
+		return t.doDelete(args)
+	default:
+		return agent.ToolResult{
+			Content: fmt.Sprintf("error: unknown action %q — valid: list|delete", strArg(args, "action")),
+			IsError: true,
+		}
+	}
+}
+
+func (t factListTool) doList() agent.ToolResult {
 	facts, err := t.db.Facts.All()
 	if err != nil {
 		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
@@ -169,6 +194,17 @@ func (t factListTool) Execute(_ map[string]any, _ *agent.ToolContext) agent.Tool
 		fmt.Fprintf(&b, "[%d] (session %d) %s\n", f.ID, f.SessionID, f.Content)
 	}
 	return agent.ToolResult{Content: strings.TrimSpace(b.String()), Details: facts}
+}
+
+func (t factListTool) doDelete(args map[string]any) agent.ToolResult {
+	id := int64(intArg(args, "id", 0))
+	if id == 0 {
+		return agent.ToolResult{Content: "error: id is required for delete", IsError: true}
+	}
+	if err := t.db.Facts.Delete(id); err != nil {
+		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
+	}
+	return agent.ToolResult{Content: fmt.Sprintf("fact %d deleted", id)}
 }
 
 // --- summary_rewrite ---

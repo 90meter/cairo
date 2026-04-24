@@ -5,6 +5,11 @@ import (
 	"path/filepath"
 )
 
+// Embedder generates vector embeddings for text. The llm.Client satisfies this.
+type Embedder interface {
+	Embed(model, text string) ([]float32, error)
+}
+
 // requireUnderCWD returns an error if path is not under workDir.
 // Uses filepath.Abs to handle relative paths and walks up to find
 // the deepest existing ancestor before calling EvalSymlinks, so it

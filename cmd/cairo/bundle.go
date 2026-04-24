@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/scotmcc/cairo/internal/db"
 	_ "modernc.org/sqlite"
 )
 
@@ -247,7 +248,7 @@ func runDiff(args []string) error {
 // --- helpers ---
 
 func cairoDBPath() string {
-	return filepath.Join(os.Getenv("HOME"), ".cairo2", "cairo.db")
+	return filepath.Join(db.DefaultDataDir(), "cairo.db")
 }
 
 func historyLabel(full bool) string {

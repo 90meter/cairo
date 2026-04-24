@@ -88,6 +88,27 @@ func (q *MemoryQ) DimBreakdown() (map[int]int, error) {
 	return out, rows.Err()
 }
 
+// AllContent returns all memories with content and metadata but without
+// embedding BLOBs — lighter than All() for listing and display purposes.
+func (q *MemoryQ) AllContent() ([]*Memory, error) {
+	rows, err := q.db.Query(
+		`SELECT id, content, tags, NULL as embedding, created_at, updated_at FROM memories ORDER BY created_at DESC`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []*Memory
+	for rows.Next() {
+		m, err := scanMemory(rows)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, m)
+	}
+	return out, rows.Err()
+}
+
 func (q *MemoryQ) All() ([]*Memory, error) {
 	rows, err := q.db.Query(
 		`SELECT id, content, tags, embedding, created_at, updated_at FROM memories ORDER BY created_at DESC`)

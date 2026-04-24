@@ -81,7 +81,7 @@ func (t agentTool) doSpawn(args map[string]any) agent.ToolResult {
 		return agent.ToolResult{Content: fmt.Sprintf("error: %v", err), IsError: true}
 	}
 
-	logDir := filepath.Join(os.Getenv("HOME"), ".cairo2", "logs")
+	logDir := filepath.Join(db.DefaultDataDir(), "logs")
 	os.MkdirAll(logDir, 0755)
 	logPath := filepath.Join(logDir, fmt.Sprintf("task_%d.log", taskID))
 	t.db.Tasks.SetLogPath(taskID, logPath)
@@ -194,6 +194,8 @@ func (t agentTool) doLog(args map[string]any) agent.ToolResult {
 		return agent.ToolResult{Content: fmt.Sprintf("error reading log: %v", err), IsError: true}
 	}
 
+	const maxLog = 65536
+
 	content := string(data)
 	tail := intArg(args, "tail", 0)
 	if tail > 0 {
@@ -202,6 +204,12 @@ func (t agentTool) doLog(args map[string]any) agent.ToolResult {
 			lines = lines[len(lines)-tail:]
 		}
 		content = strings.Join(lines, "\n")
+	}
+
+	if len(content) > maxLog {
+		total := len(content)
+		content = content[len(content)-maxLog:]
+		content += fmt.Sprintf("\n[log truncated — %d bytes total, showing last %d]", total, maxLog)
 	}
 
 	if content == "" {

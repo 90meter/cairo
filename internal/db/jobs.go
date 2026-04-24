@@ -83,11 +83,11 @@ func (q *JobQ) List() ([]*Job, error) {
 
 func (q *JobQ) SetStatus(id int64, status string) error {
 	switch status {
-	case "running":
+	case StatusRunning:
 		_, err := q.db.Exec(
 			`UPDATE jobs SET status = ?, started_at = unixepoch() WHERE id = ?`, status, id)
 		return err
-	case "done", "failed", "cancelled":
+	case StatusDone, StatusFailed, StatusCancelled:
 		_, err := q.db.Exec(
 			`UPDATE jobs SET status = ?, completed_at = unixepoch() WHERE id = ?`, status, id)
 		return err
@@ -151,18 +151,18 @@ func (q *TaskQ) ForJob(jobID int64) ([]*Task, error) {
 
 func (q *TaskQ) SetStatus(id int64, status string) error {
 	// Enforce dependency ordering: a task can only run when all its deps are done.
-	if status == "running" {
+	if status == StatusRunning {
 		if err := q.checkDeps(id); err != nil {
 			return err
 		}
 	}
 
 	switch status {
-	case "running":
+	case StatusRunning:
 		_, err := q.db.Exec(
 			`UPDATE tasks SET status = ?, started_at = unixepoch() WHERE id = ?`, status, id)
 		return err
-	case "done", "failed":
+	case StatusDone, StatusFailed:
 		_, err := q.db.Exec(
 			`UPDATE tasks SET status = ?, completed_at = unixepoch() WHERE id = ?`, status, id)
 		return err
@@ -202,7 +202,7 @@ func (q *TaskQ) ClaimForSpawn(id int64) (*Task, error) {
 	if gerr != nil {
 		return nil, fmt.Errorf("task %d not found: %w", id, gerr)
 	}
-	if task.Status != "pending" && task.Status != "blocked" {
+	if task.Status != StatusPending && task.Status != StatusBlocked {
 		return nil, fmt.Errorf("task %d is already %s", id, task.Status)
 	}
 	if err := q.checkDeps(id); err != nil {
@@ -331,7 +331,7 @@ func (q *TaskQ) ReadyTasks(jobID int64) ([]*Task, error) {
 
 	var ready []*Task
 	for _, t := range all {
-		if t.Status != "pending" && t.Status != "blocked" {
+		if t.Status != StatusPending && t.Status != StatusBlocked {
 			continue
 		}
 		deps, err := parseDeps(t.DependsOn)
@@ -340,7 +340,7 @@ func (q *TaskQ) ReadyTasks(jobID int64) ([]*Task, error) {
 		}
 		allDone := true
 		for _, depID := range deps {
-			if statusOf[depID] != "done" {
+			if statusOf[depID] != StatusDone {
 				allDone = false
 				break
 			}
@@ -367,7 +367,7 @@ func (q *TaskQ) checkDeps(id int64) error {
 		if err != nil {
 			return fmt.Errorf("task %d: dependency %d not found", id, depID)
 		}
-		if dep.Status != "done" {
+		if dep.Status != StatusDone {
 			return fmt.Errorf("task %d cannot run: depends on task %d (%q) which is %s",
 				id, depID, dep.Title, dep.Status)
 		}

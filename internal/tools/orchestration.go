@@ -75,7 +75,7 @@ func (t jobTool) doCreate(args map[string]any) agent.ToolResult {
 	}
 	role := strArg(args, "orchestrator_role")
 	if role == "" {
-		role = "orchestrator"
+		role = db.RoleOrchestrator
 	}
 	j, err := t.db.Jobs.Create(title, description, role, nil)
 	if err != nil {
@@ -199,7 +199,7 @@ func (t taskTool) doCreate(args map[string]any) agent.ToolResult {
 	}
 	role := strArg(args, "assigned_role")
 	if role == "" {
-		role = "coder"
+		role = db.RoleCoder
 	}
 	dependsOn := strArg(args, "depends_on")
 	if dependsOn == "" {

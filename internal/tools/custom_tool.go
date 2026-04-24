@@ -1,13 +1,116 @@
 package tools
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
+	"syscall"
+	"time"
 
 	"github.com/scotmcc/cairo/internal/agent"
 	"github.com/scotmcc/cairo/internal/db"
 )
+
+// customTool adapts a db.CustomTool to agent.Tool at runtime.
+type customTool struct {
+	name           string
+	description    string
+	parameters     map[string]any
+	implementation string
+	implType       string
+	db             *db.DB
+}
+
+func newCustomTool(ct *db.CustomTool, database *db.DB) agent.Tool {
+	var params map[string]any
+	json.Unmarshal([]byte(ct.Parameters), &params)
+	if params == nil {
+		params = map[string]any{"type": "object", "properties": map[string]any{}}
+	}
+	return &customTool{
+		name:           ct.Name,
+		description:    ct.Description,
+		parameters:     params,
+		implementation: ct.Implementation,
+		implType:       ct.ImplType,
+		db:             database,
+	}
+}
+
+func (t *customTool) Name() string               { return t.name }
+func (t *customTool) Description() string        { return t.description }
+func (t *customTool) Parameters() map[string]any { return t.parameters }
+
+func (t *customTool) Execute(args map[string]any, tc *agent.ToolContext) agent.ToolResult {
+	// Load config fresh each call so mid-session changes are visible.
+	config, _ := t.db.Config.All()
+
+	// Build minimal environment
+	env := []string{
+		fmt.Sprintf("PATH=%s", os.Getenv("PATH")),
+		fmt.Sprintf("HOME=%s", os.Getenv("HOME")),
+		fmt.Sprintf("TMPDIR=%s", os.Getenv("TMPDIR")),
+		fmt.Sprintf("SHELL=%s", os.Getenv("SHELL")),
+	}
+
+	// Inject args as environment variables prefixed with CAIRO_ARG_
+	for k, v := range args {
+		env = append(env, fmt.Sprintf("CAIRO_ARG_%s=%v", strings.ToUpper(k), v))
+	}
+
+	// Also pass as JSON in CAIRO_ARGS
+	argsJSON, _ := json.Marshal(args)
+	env = append(env, fmt.Sprintf("CAIRO_ARGS=%s", argsJSON))
+
+	// Get safe_env_extras config and add those vars
+	if extrasConfig, ok := config["safe_env_extras"]; ok && extrasConfig != "" {
+		for _, extra := range strings.Split(extrasConfig, ",") {
+			extra = strings.TrimSpace(extra)
+			if extra != "" {
+				if val := os.Getenv(extra); val != "" {
+					env = append(env, fmt.Sprintf("%s=%s", extra, val))
+				}
+			}
+		}
+	}
+
+	cmdCtx, cancel := context.WithTimeout(tc.Ctx, 60*time.Second)
+	defer cancel()
+
+	var cmd *exec.Cmd
+	switch t.implType {
+	case "python":
+		cmd = exec.CommandContext(cmdCtx, "python3", "-c", t.implementation)
+	default:
+		cmd = exec.CommandContext(cmdCtx, "bash", "-c", t.implementation)
+	}
+
+	cmd.Dir = tc.WorkDir
+	cmd.Env = env
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+
+	var out bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &out
+
+	err := cmd.Run()
+	if cmdCtx.Err() != nil && cmd.Process != nil {
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+	output := out.String()
+
+	if cmdCtx.Err() == context.DeadlineExceeded {
+		return agent.ToolResult{Content: output + "\n[timed out]", IsError: true}
+	}
+	if err != nil {
+		return agent.ToolResult{Content: output, IsError: true}
+	}
+	return agent.ToolResult{Content: output}
+}
 
 // customToolTool is the consolidated custom-tool tool — replaces tool_list,
 // tool_create, tool_delete. Named "custom_tool" instead of "tool" to avoid

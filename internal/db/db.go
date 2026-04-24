@@ -34,7 +34,7 @@ type DB struct {
 // It's a thin wrapper over OpenAt that resolves the default production path;
 // tests call OpenAt directly with a tempdir path to stay isolated.
 func Open() (*DB, error) {
-	dir := filepath.Join(os.Getenv("HOME"), ".cairo2")
+	dir := DefaultDataDir()
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return nil, err
 	}
@@ -51,7 +51,7 @@ func OpenAt(path string) (*DB, error) {
 
 	// Wait up to 15s for the write lock before giving up.
 	// Prevents SQLITE_BUSY when multiple subprocesses open the DB at the same time.
-	if _, err := sqldb.Exec("PRAGMA busy_timeout = 15000"); err != nil {
+	if _, err := sqldb.Exec(fmt.Sprintf("PRAGMA busy_timeout = %d", busyTimeoutMs)); err != nil {
 		sqldb.Close()
 		return nil, fmt.Errorf("set busy_timeout: %w", err)
 	}

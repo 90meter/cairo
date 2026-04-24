@@ -25,7 +25,7 @@ func runDream(_ []string) error {
 
 	// Snapshot the live DB before any maintenance begins. If the backup fails,
 	// abort — do not run the dream agent against a DB we couldn't checkpoint.
-	backupDir := filepath.Join(os.Getenv("HOME"), ".cairo2", "backups")
+	backupDir := filepath.Join(db.DefaultDataDir(), "backups")
 	if err := os.MkdirAll(backupDir, 0o755); err != nil {
 		return fmt.Errorf("create backup dir: %w", err)
 	}
@@ -69,18 +69,18 @@ func runDream(_ []string) error {
 	}
 
 	cwd, _ := os.Getwd()
-	session, err := database.Sessions.Create("dream", cwd, "dream")
+	session, err := database.Sessions.Create(db.RoleDream, cwd, db.RoleDream)
 	if err != nil {
 		return fmt.Errorf("create session: %v", err)
 	}
 
-	model, err := db.ResolveModel(database, "dream", "qwen3.6:35b-a3b-mlx-bf16")
+	model, err := db.ResolveModel(database, db.RoleDream, "qwen3.6:35b-a3b-mlx-bf16")
 	if err != nil {
 		return fmt.Errorf("resolve model: %v", err)
 	}
 
 	builtins := tools.Default(database, llmClient, embedModel)
-	if allowed, _ := database.Roles.AllowedTools("dream"); len(allowed) > 0 {
+	if allowed, _ := database.Roles.AllowedTools(db.RoleDream); len(allowed) > 0 {
 		builtins = tools.FilterByAllowlist(builtins, allowed)
 	}
 	custom, _ := tools.LoadCustom(database)

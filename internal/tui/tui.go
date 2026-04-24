@@ -34,8 +34,7 @@ func Run(a *agent.Agent, database *db.DB, session *db.Session) error {
 	// memory_search, etc.) call log.Printf for warnings/errors; in alt-screen
 	// mode those writes leak into the rendered display and corrupt it. The
 	// log file lives next to the DB so users can tail it for debugging.
-	if home := os.Getenv("HOME"); home != "" {
-		logPath := filepath.Join(home, ".cairo2", "cairo.log")
+	if logPath := filepath.Join(db.DefaultDataDir(), "cairo.log"); os.Getenv("HOME") != "" {
 		if f, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644); err == nil {
 			prev := log.Writer()
 			log.SetOutput(f)
