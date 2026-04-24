@@ -93,4 +93,22 @@ Tool calls and results are appended to `sendMsgs` (live context for the current 
 
 ---
 
+---
+
+## internal/agent/prompt.go
+
+**[magic] Hardcoded summary context count and memory limit**
+`contextCount = 4` and `limit = 15` are inline defaults — should be named constants so they're findable and not scattered across the file as bare integers.
+
+**[nice] Duplicate step numbers in BuildSystemPrompt comments**
+Two "3." steps (soul, role addendum) and two "9." steps (stamp, template substitution). Cosmetic but confusing for anyone maintaining the function.
+
+**[design] Memories loaded by recency, not relevance**
+`RecentContent(limit)` returns the 15 most recently created memories regardless of relevance to the current turn. Semantic search would be more useful but is a chicken-and-egg problem (need to know the query before building the prompt). Worth noting as a future improvement — could be partially solved by doing a quick embedding of the last user message and using that to rank memories.
+
+**[nice] Config.All() called on every turn for template substitution**
+Full table scan of config on every prompt build. Fine now, worth watching as config grows.
+
+---
+
 ## (more to come as walkthrough continues)
