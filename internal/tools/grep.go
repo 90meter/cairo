@@ -2,6 +2,7 @@ package tools
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -40,23 +41,25 @@ func (grepTool) Execute(args map[string]any, ctx *agent.ToolContext) agent.ToolR
 	}
 	glob := strArg(args, "glob")
 	ignoreCase := boolArg(args, "ignore_case")
-	context := intArg(args, "context", 0)
+	ctxLines := intArg(args, "context", 0)
 	limit := intArg(args, "limit", 100)
 
 	// prefer rg
 	if _, err := exec.LookPath("rg"); err == nil {
-		return runRg(pattern, path, glob, ignoreCase, context, limit)
+		return runRg(ctx.Ctx, pattern, path, glob, ignoreCase, ctxLines, limit)
 	}
-	return runGrep(pattern, path, glob, ignoreCase, context, limit, ctx.WorkDir)
+	return runGrep(ctx.Ctx, pattern, path, glob, ignoreCase, ctxLines, limit, ctx.WorkDir)
 }
 
-func runRg(pattern, path, glob string, ignoreCase bool, ctx, limit int) agent.ToolResult {
+const grepMaxBytes = 500 * 1024
+
+func runRg(gctx context.Context, pattern, path, glob string, ignoreCase bool, ctxLines, limit int) agent.ToolResult {
 	argv := []string{"--no-heading", "--line-number", fmt.Sprintf("--max-count=%d", limit)}
 	if ignoreCase {
 		argv = append(argv, "-i")
 	}
-	if ctx > 0 {
-		argv = append(argv, fmt.Sprintf("-C%d", ctx))
+	if ctxLines > 0 {
+		argv = append(argv, fmt.Sprintf("-C%d", ctxLines))
 	}
 	if glob != "" {
 		argv = append(argv, "--glob", glob)
@@ -64,7 +67,7 @@ func runRg(pattern, path, glob string, ignoreCase bool, ctx, limit int) agent.To
 	argv = append(argv, pattern, path)
 
 	var out bytes.Buffer
-	cmd := exec.Command("rg", argv...)
+	cmd := exec.CommandContext(gctx, "rg", argv...)
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 	cmd.Run()
@@ -72,16 +75,19 @@ func runRg(pattern, path, glob string, ignoreCase bool, ctx, limit int) agent.To
 	if result == "" {
 		return agent.ToolResult{Content: "no matches found"}
 	}
+	if len(result) > grepMaxBytes {
+		result = result[:grepMaxBytes] + "\n[output truncated at 500KB]"
+	}
 	return agent.ToolResult{Content: result}
 }
 
-func runGrep(pattern, path, glob string, ignoreCase bool, ctx, limit int, workDir string) agent.ToolResult {
+func runGrep(gctx context.Context, pattern, path, glob string, ignoreCase bool, ctxLines, limit int, workDir string) agent.ToolResult {
 	argv := []string{"-rn", fmt.Sprintf("--max-count=%d", limit)}
 	if ignoreCase {
 		argv = append(argv, "-i")
 	}
-	if ctx > 0 {
-		argv = append(argv, fmt.Sprintf("-C%d", ctx))
+	if ctxLines > 0 {
+		argv = append(argv, fmt.Sprintf("-C%d", ctxLines))
 	}
 	if glob != "" {
 		argv = append(argv, "--include="+glob)
@@ -89,7 +95,7 @@ func runGrep(pattern, path, glob string, ignoreCase bool, ctx, limit int, workDi
 	argv = append(argv, pattern, path)
 
 	var out bytes.Buffer
-	cmd := exec.Command("grep", argv...)
+	cmd := exec.CommandContext(gctx, "grep", argv...)
 	cmd.Dir = workDir
 	cmd.Stdout = &out
 	cmd.Stderr = &out
@@ -97,6 +103,9 @@ func runGrep(pattern, path, glob string, ignoreCase bool, ctx, limit int, workDi
 	result := strings.TrimSpace(out.String())
 	if result == "" {
 		return agent.ToolResult{Content: "no matches found"}
+	}
+	if len(result) > grepMaxBytes {
+		result = result[:grepMaxBytes] + "\n[output truncated at 500KB]"
 	}
 	return agent.ToolResult{Content: result}
 }

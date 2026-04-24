@@ -129,5 +129,6 @@ func (c *Client) StreamOnce(ctx context.Context, model string, messages []Messag
 		}
 		return string(textBuf), toolCalls, false, err
 	}
-	return string(textBuf), toolCalls, false, nil
+	// Scanner finished without seeing chunk.Done — the stream was cut short.
+	return string(textBuf), toolCalls, false, fmt.Errorf("ollama: stream ended without completion marker (response may be truncated)")
 }

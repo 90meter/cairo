@@ -6,6 +6,7 @@ import (
 	"log"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/scotmcc/cairo/internal/db"
 	"github.com/scotmcc/cairo/internal/llm"
@@ -67,9 +68,9 @@ func Summarize(database *db.DB, llmClient *llm.Client, sessionID int64) {
 	userMsg := llm.Message{Role: "user", Content: transcript.String()}
 
 	var response strings.Builder
-	// Summarizer runs in the background; a Background context is fine since
-	// there's no user-facing cancel for it.
-	_, _, _, err = llmClient.StreamOnce(context.Background(), model, []llm.Message{systemMsg, userMsg}, nil, llm.ChatOptions{}, llm.ChatCallbacks{
+	summCtx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+	_, _, _, err = llmClient.StreamOnce(summCtx, model, []llm.Message{systemMsg, userMsg}, nil, llm.ChatOptions{}, llm.ChatCallbacks{
 		Content: func(token string) { response.WriteString(token) },
 	})
 	if err != nil {

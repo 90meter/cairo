@@ -50,6 +50,7 @@ func Run(a *agent.Agent, database *db.DB, session *db.Session) error {
 	lipgloss.DefaultRenderer().SetColorProfile(termenv.TrueColor)
 
 	m := newModel(a, database, session)
+	unsub := m.unsub
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
 		// Even with the profile pinned, bubbletea's package-init fires
@@ -64,6 +65,7 @@ func Run(a *agent.Agent, database *db.DB, session *db.Session) error {
 		tea.WithFilter(oscFilter()),
 	)
 	_, err := p.Run()
+	unsub()
 	// Drain whatever the agent has running in the background before we return.
 	a.Close()
 	return err
@@ -159,6 +161,9 @@ type model struct {
 	streamingRaw   *strings.Builder
 	streamingStart int
 
+	// Cached glamour renderer — recreated on WindowSizeMsg when width changes.
+	renderer *glamour.TermRenderer
+
 	// Identity / status
 	aiName      string
 	memoryCount int
@@ -235,6 +240,11 @@ func newModel(a *agent.Agent, database *db.DB, sess *db.Session) model {
 
 	ch, unsub := a.Bus().Subscribe()
 
+	renderer, _ := glamour.NewTermRenderer(
+		glamour.WithAutoStyle(),
+		glamour.WithWordWrap(80),
+	)
+
 	m := model{
 		agent:        a,
 		db:           database,
@@ -247,6 +257,7 @@ func newModel(a *agent.Agent, database *db.DB, sess *db.Session) model {
 		styles:       newStyles(sess.Role),
 		transcript:   &strings.Builder{},
 		streamingRaw: &strings.Builder{},
+		renderer:     renderer,
 	}
 	m.refreshCounts()
 	return m
@@ -296,6 +307,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.width = msg.Width
 		m.height = msg.Height
+		if r, err := glamour.NewTermRenderer(
+			glamour.WithAutoStyle(),
+			glamour.WithWordWrap(msg.Width),
+		); err == nil {
+			m.renderer = r
+		}
 		m.relayout()
 
 	case tea.KeyMsg:
@@ -944,7 +961,7 @@ func (m *model) appendAssistantToken(tok string) {
 
 func (m *model) finishAssistant() {
 	raw := m.streamingRaw.String()
-	if rendered, ok := renderMarkdown(raw, m.width); ok {
+	if rendered, ok := renderMarkdown(raw, m.renderer); ok {
 		// Splice out the streamed (raw, styled) region and replace with
 		// the markdown-rendered version.
 		current := m.transcript.String()
@@ -957,22 +974,11 @@ func (m *model) finishAssistant() {
 	m.pushViewport()
 }
 
-// renderMarkdown runs the assistant's raw text through glamour to produce
-// ANSI-styled output (bold, italics, code blocks, lists, headers). Returns
-// ok=false if rendering fails or the text is empty — callers fall back to
-// the already-streamed raw text in that case.
-func renderMarkdown(text string, width int) (string, bool) {
-	if strings.TrimSpace(text) == "" {
-		return "", false
-	}
-	if width <= 0 {
-		width = 80
-	}
-	r, err := glamour.NewTermRenderer(
-		glamour.WithAutoStyle(),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
+// renderMarkdown runs the assistant's raw text through the cached glamour
+// renderer. Returns ok=false if rendering fails or the text is empty —
+// callers fall back to the already-streamed raw text in that case.
+func renderMarkdown(text string, r *glamour.TermRenderer) (string, bool) {
+	if strings.TrimSpace(text) == "" || r == nil {
 		return "", false
 	}
 	out, err := r.Render(text)

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"sync"
 
 	"github.com/scotmcc/cairo/internal/agent"
 	"github.com/scotmcc/cairo/internal/cli"
@@ -59,6 +60,8 @@ func main() {
 		fatalf("open db: %v", err)
 	}
 	defer database.Close()
+	var bgWg sync.WaitGroup
+	defer bgWg.Wait()
 
 	// --- background task mode ---
 	// When -task is set, we are a subprocess worker. Read the task from the DB,
@@ -87,7 +90,7 @@ func main() {
 	if sessionRole == "" {
 		sessionRole = "thinking_partner"
 	}
-	session, err := resolveSession(database, llmClient, *newSession, *sessionID, *sessionName, sessionRole)
+	session, err := resolveSession(database, llmClient, &bgWg, *newSession, *sessionID, *sessionName, sessionRole)
 	if err != nil {
 		fatalf("session: %v", err)
 	}
@@ -274,7 +277,7 @@ func collectArtifacts(ch <-chan agent.Event, database *db.DB, taskID int64) {
 	}
 }
 
-func resolveSession(database *db.DB, llmClient *llm.Client, forceNew bool, id int64, name, role string) (*db.Session, error) {
+func resolveSession(database *db.DB, llmClient *llm.Client, wg *sync.WaitGroup, forceNew bool, id int64, name, role string) (*db.Session, error) {
 	cwd, _ := os.Getwd()
 
 	if id != 0 {
@@ -287,7 +290,11 @@ func resolveSession(database *db.DB, llmClient *llm.Client, forceNew bool, id in
 	if forceNew {
 		prev, _ := database.Sessions.Latest()
 		if prev != nil {
-			go agent.SummarizeAll(database, llmClient, prev.ID)
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				agent.SummarizeAll(database, llmClient, prev.ID)
+			}()
 		}
 		return database.Sessions.Create(name, cwd, role)
 	}

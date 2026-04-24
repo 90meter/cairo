@@ -163,7 +163,11 @@ func (t agentTool) doWait(args map[string]any, ctx *agent.ToolContext) agent.Too
 			})
 		}
 
-		time.Sleep(tick)
+		select {
+		case <-time.After(tick):
+		case <-ctx.Ctx.Done():
+			return agent.ToolResult{Content: "wait cancelled", IsError: true}
+		}
 	}
 
 	return agent.ToolResult{

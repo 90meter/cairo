@@ -55,6 +55,7 @@ func runLoop(ctx context.Context, cfg loopConfig) error {
 		toolMap[t.Name()] = t
 	}
 	tc := &ToolContext{
+		Ctx:     ctx,
 		WorkDir: cfg.workDir,
 		DB:      cfg.db,
 		Bus:     cfg.bus,

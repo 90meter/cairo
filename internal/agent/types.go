@@ -1,6 +1,8 @@
 package agent
 
 import (
+	"context"
+
 	"github.com/scotmcc/cairo/internal/db"
 	"github.com/scotmcc/cairo/internal/llm"
 )
@@ -27,6 +29,7 @@ type ToolResult struct {
 // Both may be nil in contexts that don't have an Agent (e.g. future
 // standalone tool invocation); tools must guard for that.
 type ToolContext struct {
+	Ctx     context.Context
 	WorkDir string
 	DB      *db.DB
 	Bus     *Bus // tools can publish progress updates

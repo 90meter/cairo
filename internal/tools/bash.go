@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"os/exec"
+	"syscall"
 	"time"
 
 	"github.com/scotmcc/cairo/internal/agent"
@@ -38,8 +39,6 @@ func (bashTool) Execute(args map[string]any, ctx *agent.ToolContext) agent.ToolR
 	if val, err := ctx.DB.Config.Get("unsafe_mode"); err == nil && val != "" {
 		unsafeMode = val
 	}
-	// bash is always allowed — shell commands cannot be reliably path-scoped.
-	// unsafe_mode=false still permits bash; it only restricts file write/edit paths.
 	_ = unsafeMode
 
 	timeoutSec := intArg(args, "timeout", 30)
@@ -48,23 +47,36 @@ func (bashTool) Execute(args map[string]any, ctx *agent.ToolContext) agent.ToolR
 	}
 	timeout := time.Duration(timeoutSec) * time.Second
 
-	cmdCtx, cancel := context.WithTimeout(context.Background(), timeout)
+	cmdCtx, cancel := context.WithTimeout(ctx.Ctx, timeout)
 	defer cancel()
 
 	cmd := exec.CommandContext(cmdCtx, "bash", "-c", command)
 	cmd.Dir = ctx.WorkDir
+	// Put bash and all its children in a new process group so we can kill
+	// the whole tree on timeout (catches grandchildren like git credential helpers).
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 
 	var out bytes.Buffer
 	cmd.Stdout = &out
 	cmd.Stderr = &out
 
 	err := cmd.Run()
+
+	// Kill the entire process group to clean up any grandchildren.
+	if cmdCtx.Err() != nil && cmd.Process != nil {
+		syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+	}
+
 	output := out.String()
 	originalSize := len(output)
 
-	if cmdCtx.Err() == context.DeadlineExceeded {
+	if cmdCtx.Err() != nil {
+		msg := fmt.Sprintf("\n[timed out after %s]", timeout)
+		if ctx.Ctx.Err() != nil {
+			msg = "\n[cancelled]"
+		}
 		return agent.ToolResult{
-			Content: output + fmt.Sprintf("\n[timed out after %s]", timeout),
+			Content: output + msg,
 			IsError: true,
 		}
 	}

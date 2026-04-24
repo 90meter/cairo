@@ -11,8 +11,9 @@ import (
 const DefaultURL = "http://localhost:11434"
 
 type Client struct {
-	url  string
-	http *http.Client
+	url       string
+	http      *http.Client // no timeout — streaming uses request context deadline
+	shortHTTP *http.Client // 15s timeout for health checks and non-streaming calls
 }
 
 func New(url string) *Client {
@@ -20,15 +21,16 @@ func New(url string) *Client {
 		url = DefaultURL
 	}
 	return &Client{
-		url: url,
-		http: &http.Client{
-			Timeout: 10 * time.Minute, // generous for long generations; prevents forever-hangs
+		url:  url,
+		http: &http.Client{},
+		shortHTTP: &http.Client{
+			Timeout: 15 * time.Second,
 		},
 	}
 }
 
 func (c *Client) Ping() error {
-	resp, err := c.http.Get(c.url + "/api/version")
+	resp, err := c.shortHTTP.Get(c.url + "/api/version")
 	if err != nil {
 		return fmt.Errorf("ollama unreachable at %s: %w", c.url, err)
 	}
@@ -41,13 +43,13 @@ func (c *Client) post(path string, body any) (*http.Response, error) {
 	if err != nil {
 		return nil, err
 	}
-	return c.http.Post(c.url+path, "application/json", bytes.NewReader(b))
+	return c.shortHTTP.Post(c.url+path, "application/json", bytes.NewReader(b))
 }
 
 // ListModels returns the names of models currently installed on the Ollama
 // server (the equivalent of `ollama list`).
 func (c *Client) ListModels() ([]string, error) {
-	resp, err := c.http.Get(c.url + "/api/tags")
+	resp, err := c.shortHTTP.Get(c.url + "/api/tags")
 	if err != nil {
 		return nil, fmt.Errorf("list models: %w", err)
 	}

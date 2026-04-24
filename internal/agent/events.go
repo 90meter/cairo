@@ -42,9 +42,9 @@ type Bus struct {
 }
 
 // Subscribe returns a receive-only channel and an unsubscribe function.
-// The channel is buffered (64) so a slow subscriber doesn't stall the agent.
+// The channel is buffered (256) so a slow subscriber doesn't stall the agent.
 func (b *Bus) Subscribe() (<-chan Event, func()) {
-	ch := make(chan Event, 64)
+	ch := make(chan Event, 256)
 	b.mu.Lock()
 	b.subs = append(b.subs, ch)
 	b.mu.Unlock()
