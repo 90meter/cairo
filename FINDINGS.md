@@ -63,4 +63,19 @@ _Fix: split into `startup.go` (connectOllama, resolveSession, resolveOllamaURL),
 
 ---
 
+---
+
+## internal/agent/summarizer.go
+
+**[hardening] Summarizer is not tool-call aware — loses most of the context**
+The transcript builder maps everything that isn't `role='assistant'` to "User", including `role='tool'` results, `role='system'` messages, and tool-call-only assistant turns (which have empty Content). This means:
+- Tool results are labeled as "User" messages with raw output as content
+- Assistant tool-call requests (empty Content, has ToolCalls) produce "Cairo: " with nothing
+- System messages are labeled "User"
+- The "Cairo called bash, got X result, then called edit" narrative is completely lost from summaries
+
+_Fix: make the transcript builder role-aware — map tool results to "Tool result: [content]", skip or summarize tool-call-only assistant turns as "Cairo called: [tool names]", skip system messages entirely._
+
+---
+
 ## (more to come as walkthrough continues)
