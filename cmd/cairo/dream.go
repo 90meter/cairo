@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/scotmcc/cairo/internal/agent"
 	"github.com/scotmcc/cairo/internal/cli"
@@ -20,6 +22,43 @@ func runDream(_ []string) error {
 		return fmt.Errorf("open db: %v", err)
 	}
 	defer database.Close()
+
+	// Snapshot the live DB before any maintenance begins. If the backup fails,
+	// abort — do not run the dream agent against a DB we couldn't checkpoint.
+	backupDir := filepath.Join(os.Getenv("HOME"), ".cairo2", "backups")
+	if err := os.MkdirAll(backupDir, 0o755); err != nil {
+		return fmt.Errorf("create backup dir: %w", err)
+	}
+	backupPath := filepath.Join(backupDir, time.Now().Format("dream-2006-01-02-15-04.cairo"))
+
+	src := cairoDBPath()
+	tmp, err := os.CreateTemp("", "cairo-dream-backup-*.db")
+	if err != nil {
+		return fmt.Errorf("create backup temp: %w", err)
+	}
+	tmpPath := tmp.Name()
+	tmp.Close()
+	os.Remove(tmpPath) // vacuumInto refuses an existing target
+
+	if err := vacuumInto(src, tmpPath); err != nil {
+		return fmt.Errorf("backup vacuum: %w", err)
+	}
+	defer os.Remove(tmpPath)
+
+	counts, err := countEntities(tmpPath)
+	if err != nil {
+		return fmt.Errorf("backup count: %w", err)
+	}
+	manifest := bundleManifest{
+		Version:         manifestVersion,
+		ExportedAt:      time.Now().UTC(),
+		IncludesHistory: true,
+		Counts:          counts,
+	}
+	if err := writeBundle(backupPath, tmpPath, manifest); err != nil {
+		return fmt.Errorf("write backup bundle: %w", err)
+	}
+	fmt.Printf("backup saved to %s\n", backupPath)
 
 	ollamaURL := resolveOllamaURL(database)
 	embedModel, _ := database.Config.Get("embed_model")
