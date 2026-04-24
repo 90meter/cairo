@@ -144,4 +144,67 @@ Full table scan of config on every prompt build. Fine now, worth watching as con
 
 ---
 
-## (more to come as walkthrough continues)
+---
+
+## internal/tools/memory.go + knowledge.go
+
+**[hardening] fact_promote has no delete option — dream mode can't clean up**
+`FactQ.Delete` exists in the DB layer but no agent tool surfaces it. The dream agent can promote facts to memories but cannot delete the original fact row afterward — leaving orphaned facts. Need a `fact_delete` action on `factListTool` or a new tool.
+
+**[nice] Embedder interface belongs in tool.go, not memory.go**
+`Embedder` is defined in `memory.go` but used by 4 tools. Should be in `tool.go` or a shared `embed.go` alongside the `EmbedConfig` consolidation.
+
+**[nice] Repeated embedding boilerplate across 3 tools**
+`if t.embedder != nil && t.embedModel != ""` + the Embed call appears identically in memory, fact_promote, summary_rewrite. An `EmbedConfig` struct with an `Embed(text string) ([]float32, error)` method (nil-safe) would remove this repetition.
+
+**[nice] formatTags uses Go string quoting instead of json.Marshal**
+`fmt.Sprintf("%q", p)` in `formatTags` — Go's quoting is close to JSON but not identical. Should use `encoding/json` for correctness.
+
+**[nice] doList() loads all memories including embeddings (BLOBs)**
+`Memories.All()` loads every row including embedding BLOBs — unnecessary for a list operation. A content-only query would be lighter, especially for dream mode iterating hundreds of entries.
+
+**[nice] Stale file comment in knowledge.go**
+Header says "read-only queries" but 3 of 4 tools in the file write data.
+
+---
+
+---
+
+## internal/tools/spawn.go
+
+**[magic] Hardcoded ~/.cairo2/logs path and 0755 permissions**
+Same ~./cairo2 magic string. Should use the shared data dir constant.
+
+**[hardening] doLog reads entire file into memory, no size cap**
+`os.ReadFile` slurps the whole log file. Unlike bash (capped at 65KB), a long-running task log could be megabytes returned to model context. The tail implementation also reads everything first then slices — should seek from end for large files.
+
+---
+
+## TUI (internal/tui/) — DEFERRED
+Complex enough to warrant a dedicated review session. Known issues from earlier work:
+- Glamour renderer now cached (fixed)
+- Event bus buffer increased to 256 (fixed)  
+- unsub() now called on exit (fixed)
+- Remaining: tool progress timer, turn-level timeout, /status command visibility
+
+---
+
+---
+
+## Data Directory Design [SKIP — design decision]
+
+**[design] ~/.cairo2 → ~/.cairo with project-local and explicit override**
+Resolution order should be:
+1. `--data-dir <path>` flag (explicit, wins always)
+2. `CAIRO_DB` env var (already supported)
+3. `.cairo/` in current directory or any parent (project-local, like .git)
+4. `~/.cairo` (global default, rename from ~/.cairo2)
+
+First-run: detect old `~/.cairo2/` and migrate or use it if `~/.cairo/` doesn't exist.
+Touches: db.Open(), flag parsing in main.go, runDream/runTask path resolution.
+_This is a significant design change — implement as a dedicated feature, not a cleanup task._
+
+---
+
+## Review Status
+Remaining for future session: internal/cli/, internal/tools/tool.go, internal/tools/dbtools.go, simple tool files (config, session, role, soul, skill, note, prompt_part, read, write, edit, bash, grep, find, ls, fetch, search)
